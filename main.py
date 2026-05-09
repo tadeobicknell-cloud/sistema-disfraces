@@ -477,7 +477,7 @@ class AppSistemaDisfraces:
             padding=20,
             bgcolor=ft.Colors.WHITE,
             border_radius=15,
-            margin=ft.margin.only(bottom=20),
+            margin=0,
         )
         
         clientes_card = ft.Card(
