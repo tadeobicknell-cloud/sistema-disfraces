@@ -1,8 +1,6 @@
 import flet as ft
 from supabase import create_client
 from datetime import date, timedelta
-import sys
-import traceback
 
 # ================= SUPABASE =================
 SUPABASE_URL = "https://oyyjcqnnbvypxbuvvtst.supabase.co"
@@ -175,7 +173,7 @@ def main(page: ft.Page):
         resultado.color = "green"
         resultado.update()
     
-      # ========== INTERFAZ CON SCROLL ==========
+    # ========== INTERFAZ CON SCROLL ==========
     scroll_view = ft.Column(
         controls=[
             ft.Container(
@@ -210,7 +208,7 @@ def main(page: ft.Page):
             ft.Container(content=resultado, padding=20)
         ],
         spacing=20,
-        scroll=ft.ScrollMode.AUTO  
+        scroll=ft.ScrollMode.AUTO
     )
     
     page.add(scroll_view)
