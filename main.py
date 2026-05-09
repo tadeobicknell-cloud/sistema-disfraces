@@ -11,8 +11,8 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def main(page: ft.Page):
     page.title = "Sistema de Disfraces"
-    page.window_width = 750
-    page.window_height = 850
+    page.window_width = 800
+    page.window_height = 900
     page.padding = 20
     page.bgcolor = "#F3F4F6"
     
@@ -107,6 +107,107 @@ def main(page: ft.Page):
         cedula_alq.value = disfraz.value = costo.value = pago.value = ""
         for campo in [cedula_alq, disfraz, costo, pago]:
             campo.update()
+    
+    # ========== DEVOLUCIÓN ==========
+    cedula_dev = ft.TextField(label="Cédula del cliente", width=300)
+    multa_retraso = ft.TextField(label="Multa por retraso (C$)", width=200)
+    multa_perdida = ft.TextField(label="Multa por pérdida/daño (C$)", width=200)
+    pago_saldo = ft.TextField(label="Pago de saldo pendiente (C$)", width=200, visible=False)
+    alquiler_actual = None
+    
+    def verificar_alquiler(e):
+        nonlocal alquiler_actual
+        if not cedula_dev.value:
+            resultado.value = "⚠️ Ingrese cédula"
+            resultado.color = "red"
+            resultado.update()
+            return
+        
+        alquileres = supabase.table("alquileres").select("*").eq("cedula_cliente", cedula_dev.value).is_("fecha_devolucion_real", "null").execute()
+        if not alquileres.data:
+            resultado.value = "⚠️ No hay alquileres activos para este cliente"
+            resultado.color = "red"
+            resultado.update()
+            return
+        
+        alquiler_actual = alquileres.data[0]
+        
+        fecha_esperada = date.fromisoformat(alquiler_actual["fecha_devolucion_esperada"])
+        hoy = date.today()
+        if hoy > fecha_esperada:
+            dias_retraso = (hoy - fecha_esperada).days
+            retraso_texto = f"⚠️ Retraso: {dias_retraso} días"
+            multa_retraso.visible = True
+            multa_retraso.update()
+        else:
+            retraso_texto = f"✅ A tiempo. Faltan {(fecha_esperada - hoy).days} días"
+            multa_retraso.visible = False
+            multa_retraso.update()
+        
+        saldo_actual = alquiler_actual["saldo_pendiente"]
+        pago_saldo.visible = saldo_actual > 0
+        pago_saldo.label = f"Pago de saldo pendiente (C${saldo_actual:.2f})"
+        pago_saldo.update()
+        
+        resultado.value = f"🎭 {alquiler_actual['disfraz']}\n👤 {alquiler_actual['nombre_cliente']}\n📅 Salida: {alquiler_actual['fecha_salida']}\n⏰ Devuelve: {alquiler_actual['fecha_devolucion_esperada']}\n{retraso_texto}\n💰 Costo: C${alquiler_actual['costo_total']:.2f}\n💵 Pagado: C${alquiler_actual['monto_pagado']:.2f}\n💸 Saldo pendiente: C${saldo_actual:.2f}"
+        resultado.color = "blue"
+        resultado.update()
+        
+        multa_perdida.visible = True
+        multa_perdida.update()
+    
+    def confirmar_devolucion(e):
+        nonlocal alquiler_actual
+        if not alquiler_actual:
+            resultado.value = "⚠️ Primero verifique el alquiler"
+            resultado.color = "red"
+            resultado.update()
+            return
+        
+        saldo_actual = alquiler_actual["saldo_pendiente"]
+        
+        try:
+            pago_saldo_v = float(pago_saldo.value) if pago_saldo.value else 0
+        except:
+            pago_saldo_v = 0
+        
+        if saldo_actual > 0 and pago_saldo_v < saldo_actual:
+            resultado.value = f"⚠️ Debe pagar el saldo pendiente de C${saldo_actual:.2f}"
+            resultado.color = "red"
+            resultado.update()
+            return
+        
+        try:
+            retraso = float(multa_retraso.value) if multa_retraso.value else 0
+            perdida = float(multa_perdida.value) if multa_perdida.value else 0
+        except:
+            retraso = perdida = 0
+        
+        nuevo_pagado = alquiler_actual["monto_pagado"] + pago_saldo_v
+        total_cobrado = nuevo_pagado + retraso + perdida
+        
+        supabase.table("alquileres").update({
+            "fecha_devolucion_real": date.today().isoformat(),
+            "monto_pagado": nuevo_pagado,
+            "saldo_pendiente": 0,
+            "multa_retraso": retraso,
+            "multa_perdida": perdida
+        }).eq("id", alquiler_actual["id"]).execute()
+        
+        resultado.value = f"✅ Devolución registrada\n💰 Total cobrado: C${total_cobrado:.2f}\n   Alquiler: C${alquiler_actual['monto_pagado']:.2f}\n   Pago saldo: C${pago_saldo_v:.2f}\n   Multa retraso: C${retraso:.2f}\n   Multa pérdida: C${perdida:.2f}"
+        resultado.color = "green"
+        resultado.update()
+        
+        cedula_dev.value = ""
+        multa_retraso.value = ""
+        multa_perdida.value = ""
+        pago_saldo.value = ""
+        multa_retraso.visible = False
+        multa_perdida.visible = False
+        pago_saldo.visible = False
+        for campo in [cedula_dev, multa_retraso, multa_perdida, pago_saldo]:
+            campo.update()
+        alquiler_actual = None
     
     # ========== RESERVA ==========
     cedula_res = ft.TextField(label="Cédula del cliente", width=300)
@@ -283,136 +384,20 @@ def main(page: ft.Page):
             resultado.color = "red"
             resultado.update()
     
-    # ========== DEVOLUCIÓN ==========
-    cedula_dev = ft.TextField(label="Cédula del cliente", width=300)
-    multa_retraso = ft.TextField(label="Multa por retraso (C$)", width=200, visible=False)
-    multa_perdida = ft.TextField(label="Multa por pérdida/daño (C$)", width=200, visible=False)
-    pago_saldo = ft.TextField(label="Pago de saldo pendiente (C$)", width=200, visible=False)
-    alquiler_actual = None
-    
-    def verificar_alquiler(e):
-        nonlocal alquiler_actual
-        if not cedula_dev.value:
-            resultado.value = "⚠️ Ingrese cédula"
-            resultado.color = "red"
-            resultado.update()
-            return
-        alquileres = supabase.table("alquileres").select("*").eq("cedula_cliente", cedula_dev.value).eq("tipo", "alquiler_normal").is_("fecha_devolucion_real", "null").execute()
-        if not alquileres.data:
-            resultado.value = "⚠️ No hay alquileres activos para este cliente"
-            resultado.color = "red"
-            resultado.update()
-            return
-        alquiler_actual = alquileres.data[0]
-        
-        fecha_esperada = date.fromisoformat(alquiler_actual["fecha_devolucion_esperada"])
-        hoy = date.today()
-        if hoy > fecha_esperada:
-            dias_retraso = (hoy - fecha_esperada).days
-            retraso_texto = f"⚠️ Retraso: {dias_retraso} días"
-            multa_retraso.visible = True
-            multa_retraso.update()
-        else:
-            retraso_texto = f"✅ A tiempo. Faltan {(fecha_esperada - hoy).days} días"
-            multa_retraso.visible = False
-            multa_retraso.update()
-        
-        saldo_actual = alquiler_actual["saldo_pendiente"]
-        pago_saldo.visible = saldo_actual > 0
-        pago_saldo.label = f"Pago de saldo pendiente (C${saldo_actual:.2f})"
-        pago_saldo.update()
-        
-        resultado.value = f"🎭 {alquiler_actual['disfraz']}\n👤 {alquiler_actual['nombre_cliente']}\n📅 Salida: {alquiler_actual['fecha_salida']}\n⏰ Devuelve: {alquiler_actual['fecha_devolucion_esperada']}\n{retraso_texto}\n💰 Costo: C${alquiler_actual['costo_total']:.2f}\n💵 Pagado: C${alquiler_actual['monto_pagado']:.2f}\n💸 Saldo pendiente: C${saldo_actual:.2f}"
-        resultado.color = "blue"
-        resultado.update()
-        multa_perdida.visible = True
-        multa_perdida.update()
-    
-    def confirmar_devolucion(e):
-        nonlocal alquiler_actual
-        if not alquiler_actual:
-            resultado.value = "⚠️ Primero verifique el alquiler"
-            resultado.color = "red"
-            resultado.update()
-            return
-        
-        saldo_actual = alquiler_actual["saldo_pendiente"]
-        try:
-            pago_saldo_v = float(pago_saldo.value) if pago_saldo.value else 0
-        except:
-            pago_saldo_v = 0
-        
-        if saldo_actual > 0 and pago_saldo_v < saldo_actual:
-            resultado.value = f"⚠️ Debe pagar el saldo pendiente de C${saldo_actual:.2f}"
-            resultado.color = "red"
-            resultado.update()
-            return
-        
-        try:
-            retraso = float(multa_retraso.value) if multa_retraso.value else 0
-            perdida = float(multa_perdida.value) if multa_perdida.value else 0
-        except:
-            retraso = perdida = 0
-        
-        nuevo_pagado = alquiler_actual["monto_pagado"] + pago_saldo_v
-        total_cobrado = nuevo_pagado + retraso + perdida
-        
-        supabase.table("alquileres").update({
-            "fecha_devolucion_real": date.today().isoformat(),
-            "monto_pagado": nuevo_pagado,
-            "saldo_pendiente": 0,
-            "multa_retraso": retraso,
-            "multa_perdida": perdida
-        }).eq("id", alquiler_actual["id"]).execute()
-        
-        resultado.value = f"✅ Devolución registrada\n💰 Total cobrado: C${total_cobrado:.2f}\n   Alquiler: C${alquiler_actual['monto_pagado']:.2f}\n   Pago saldo: C${pago_saldo_v:.2f}\n   Multa retraso: C${retraso:.2f}\n   Multa pérdida: C${perdida:.2f}"
-        resultado.color = "green"
-        resultado.update()
-        
-        cedula_dev.value = ""
-        multa_retraso.value = ""
-        multa_perdida.value = ""
-        pago_saldo.value = ""
-        multa_retraso.visible = False
-        multa_perdida.visible = False
-        pago_saldo.visible = False
-        for campo in [cedula_dev, multa_retraso, multa_perdida, pago_saldo]:
-            campo.update()
-        alquiler_actual = None
-    
-    # ========== GASTOS ==========
-    gasto_desc = ft.TextField(label="Descripción del gasto", width=300)
-    gasto_monto = ft.TextField(label="Monto (C$)", width=150)
-    
-    def registrar_gasto(e):
-        if not gasto_desc.value or not gasto_monto.value:
-            resultado.value = "⚠️ Complete descripción y monto"
-            resultado.color = "red"
-            resultado.update()
-            return
-        try:
-            monto_v = float(gasto_monto.value)
-        except:
-            resultado.value = "⚠️ Monto inválido"
-            resultado.color = "red"
-            resultado.update()
-            return
-        nuevo = {
-            "descripcion": gasto_desc.value,
-            "monto": monto_v,
-            "fecha": date.today().isoformat()
-        }
-        supabase.table("gastos").insert(nuevo).execute()
-        resultado.value = f"✅ Gasto registrado: {gasto_desc.value} - C${monto_v:.2f}"
-        resultado.color = "green"
-        resultado.update()
-        gasto_desc.value = ""
-        gasto_monto.value = ""
-        gasto_desc.update()
-        gasto_monto.update()
-    
     # ========== CONSULTAS ==========
     def ver_clientes(e):
+        clientes = supabase.table("clientes").select("*").execute()
+        if not clientes.data:
+            resultado.value = "No hay clientes registrados"
+            resultado.color = "orange"
+            resultado.update()
+            return
+        texto = "📋 LISTA DE CLIENTES\n" + "="*45 + "\n"
+        for c in clientes.data:
+            texto += f"👤 {c['nombre']}\n"
+            texto += f"   📌 Cédula: {c['cedula']}\n"
+            texto += f"   📞 Teléfono: {c.get('telefono', 'No registrado')}\n"
+                def ver_clientes(e):
         clientes = supabase.table("clientes").select("*").execute()
         if not clientes.data:
             resultado.value = "No hay clientes registrados"
@@ -515,82 +500,75 @@ def main(page: ft.Page):
         resultado.update()
     
     # ========== INTERFAZ CON SCROLL ==========
-    main_container = ft.Container(
-        content=ft.Column(
-            controls=[
-                ft.Container(
-                    content=ft.Row([ft.Text("🎭", size=45), ft.Column([
-                        ft.Text("TRAJES, DISFRACES Y MUCHO MÁS", size=22, weight="bold", color="white"),
-                        ft.Text("Sistema de Gestión", size=14, color="white")
-                    ], spacing=0)], alignment="center"),
-                    padding=20,
-                    bgcolor="#6B21E6",
-                    border_radius=15
-                ),
-                ft.Card(ft.Container(ft.Column([
-                    ft.Text("📝 REGISTRAR CLIENTE", size=18, weight="bold", color="#6B21E6"),
-                    cedula, nombre, telefono, direccion,
-                    ft.ElevatedButton("Guardar Cliente", on_click=registrar_cliente, bgcolor="#3B82F6", color="white")
-                ], spacing=15), padding=20), elevation=3),
-                ft.Card(ft.Container(ft.Column([
-                    ft.Text("🎭 REGISTRAR ALQUILER", size=18, weight="bold", color="#F97316"),
-                    cedula_alq, disfraz,
-                    ft.Row([costo, pago, dias]),
-                    ft.ElevatedButton("Registrar Alquiler", on_click=registrar_alquiler, bgcolor="#F97316", color="white")
-                ], spacing=15), padding=20), elevation=3),
-                ft.Card(ft.Container(ft.Column([
-                    ft.Text("📅 REGISTRAR RESERVA (50% mínimo)", size=18, weight="bold", color="#6B21E6"),
-                    cedula_res, disfraz_res,
-                    ft.Row([costo_res, anticipo_res]),
-                    fecha_retiro_res, dias_res,
-                    ft.ElevatedButton("Registrar Reserva", on_click=registrar_reserva, bgcolor="#6B21E6", color="white")
-                ], spacing=15), padding=20), elevation=3),
-                ft.Card(ft.Container(ft.Column([
-                    ft.Text("📋 GESTIÓN DE RESERVAS", size=18, weight="bold", color="#6B21E6"),
-                    ft.Row([reserva_id, pago_retiro]),
-                    ft.ElevatedButton("Retirar Reserva", on_click=retirar_reserva, bgcolor="#10B981", color="white"),
-                    ft.ElevatedButton("Ver Reservas Activas", on_click=ver_reservas_activas, bgcolor="#3B82F6", color="white"),
-                    ft.Row([reserva_cancelar]),
-                    ft.ElevatedButton("Cancelar Reserva", on_click=cancelar_reserva, bgcolor="#EF4444", color="white")
-                ], spacing=15), padding=20), elevation=3),
-                ft.Card(ft.Container(ft.Column([
-                    ft.Text("🔄 REGISTRAR DEVOLUCIÓN", size=18, weight="bold", color="#10B981"),
-                    cedula_dev,
-                    ft.ElevatedButton("Verificar Alquiler", on_click=verificar_alquiler, bgcolor="#3B82F6", color="white"),
-                    pago_saldo,
-                    ft.Row([multa_retraso, multa_perdida]),
-                    ft.ElevatedButton("Confirmar Devolución", on_click=confirmar_devolucion, bgcolor="#10B981", color="white")
-                ], spacing=15), padding=20), elevation=3),
-                ft.Card(ft.Container(ft.Column([
-                    ft.Text("💸 REGISTRAR GASTO", size=18, weight="bold", color="#EF4444"),
-                    ft.Row([gasto_desc, gasto_monto]),
-                    ft.ElevatedButton("Guardar Gasto", on_click=registrar_gasto, bgcolor="#EF4444", color="white")
-                ], spacing=15), padding=20), elevation=3),
-                ft.Card(ft.Container(ft.Column([
-                    ft.Text("📊 CONSULTAS", size=18, weight="bold", color="#6B21E6"),
-                    ft.Row([
-                        ft.ElevatedButton("Ver Clientes", on_click=ver_clientes, bgcolor="#3B82F6", color="white"),
-                        ft.ElevatedButton("Ver Activos", on_click=ver_activos, bgcolor="#3B82F6", color="white"),
-                    ]),
-                    ft.Row([
-                        ft.ElevatedButton("Ver en Mora", on_click=ver_moras, bgcolor="#EF4444", color="white"),
-                        ft.ElevatedButton("Ver Ingresos", on_click=ver_ingresos, bgcolor="#10B981", color="white"),
-                    ]),
-                ], spacing=15), padding=20), elevation=3),
-                ft.Container(
-                    content=ft.Column([
-                        ft.Text("📋 RESULTADOS:", size=16, weight="bold", color="#6B21E6"),
-                        ft.Container(content=resultado, padding=15, bgcolor="#F9FAFB", border_radius=10)
-                    ], spacing=10),
-                    padding=20
-                )
-            ],
-            spacing=20,
-        ),
-        expand=True,
+    scroll_content = ft.Column(
+        controls=[
+            ft.Container(
+                content=ft.Row([ft.Text("🎭", size=45), ft.Column([
+                    ft.Text("TRAJES, DISFRACES Y MUCHO MÁS", size=22, weight="bold", color="white"),
+                    ft.Text("Sistema de Gestión", size=14, color="white")
+                ], spacing=0)], alignment="center"),
+                padding=20,
+                bgcolor="#6B21E6",
+                border_radius=15
+            ),
+            ft.Card(ft.Container(ft.Column([
+                ft.Text("📝 REGISTRAR CLIENTE", size=18, weight="bold", color="#6B21E6"),
+                cedula, nombre, telefono, direccion,
+                ft.ElevatedButton("Guardar Cliente", on_click=registrar_cliente, bgcolor="#3B82F6", color="white")
+            ], spacing=15), padding=20), elevation=3),
+            ft.Card(ft.Container(ft.Column([
+                ft.Text("🎭 REGISTRAR ALQUILER", size=18, weight="bold", color="#F97316"),
+                cedula_alq, disfraz,
+                ft.Row([costo, pago, dias]),
+                ft.ElevatedButton("Registrar Alquiler", on_click=registrar_alquiler, bgcolor="#F97316", color="white")
+            ], spacing=15), padding=20), elevation=3),
+            ft.Card(ft.Container(ft.Column([
+                ft.Text("📅 REGISTRAR RESERVA (50% mínimo)", size=18, weight="bold", color="#6B21E6"),
+                cedula_res, disfraz_res,
+                ft.Row([costo_res, anticipo_res]),
+                fecha_retiro_res, dias_res,
+                ft.ElevatedButton("Registrar Reserva", on_click=registrar_reserva, bgcolor="#6B21E6", color="white")
+            ], spacing=15), padding=20), elevation=3),
+            ft.Card(ft.Container(ft.Column([
+                ft.Text("📋 GESTIÓN DE RESERVAS", size=18, weight="bold", color="#6B21E6"),
+                ft.Row([reserva_id, pago_retiro]),
+                ft.ElevatedButton("Retirar Reserva", on_click=retirar_reserva, bgcolor="#10B981", color="white"),
+                ft.ElevatedButton("Ver Reservas Activas", on_click=ver_reservas_activas, bgcolor="#3B82F6", color="white"),
+                ft.Row([reserva_cancelar]),
+                ft.ElevatedButton("Cancelar Reserva", on_click=cancelar_reserva, bgcolor="#EF4444", color="white")
+            ], spacing=15), padding=20), elevation=3),
+            ft.Card(ft.Container(ft.Column([
+                ft.Text("🔄 REGISTRAR DEVOLUCIÓN", size=18, weight="bold", color="#10B981"),
+                cedula_dev,
+                ft.ElevatedButton("Verificar Alquiler", on_click=verificar_alquiler, bgcolor="#3B82F6", color="white"),
+                pago_saldo,
+                ft.Row([multa_retraso, multa_perdida]),
+                ft.ElevatedButton("Confirmar Devolución", on_click=confirmar_devolucion, bgcolor="#10B981", color="white")
+            ], spacing=15), padding=20), elevation=3),
+            ft.Card(ft.Container(ft.Column([
+                ft.Text("📊 CONSULTAS", size=18, weight="bold", color="#6B21E6"),
+                ft.Row([
+                    ft.ElevatedButton("Ver Clientes", on_click=ver_clientes, bgcolor="#3B82F6", color="white"),
+                    ft.ElevatedButton("Ver Activos", on_click=ver_activos, bgcolor="#3B82F6", color="white"),
+                ]),
+                ft.Row([
+                    ft.ElevatedButton("Ver en Mora", on_click=ver_moras, bgcolor="#EF4444", color="white"),
+                    ft.ElevatedButton("Ver Ingresos", on_click=ver_ingresos, bgcolor="#10B981", color="white"),
+                ]),
+            ], spacing=15), padding=20), elevation=3),
+            ft.Container(
+                content=ft.Column([
+                    ft.Text("📋 RESULTADOS:", size=16, weight="bold", color="#6B21E6"),
+                    ft.Container(content=resultado, padding=15, bgcolor="#F9FAFB", border_radius=10)
+                ], spacing=10),
+                padding=20
+            )
+        ],
+        spacing=20,
+        scroll=ft.ScrollMode.AUTO
     )
     
-    page.add(main_container)
+    page.add(scroll_content)
 
 if __name__ == "__main__":
     ft.app(target=main, host="0.0.0.0", port=8000)
