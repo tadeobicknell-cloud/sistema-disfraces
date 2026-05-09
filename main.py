@@ -625,8 +625,8 @@ def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.LIGHT
     page.padding = 0
     page.bgcolor = ft.Colors.GREY_50
-    
+
     app = AppSistemaDisfraces()
     page.add(app.build())
 
-ft.app(target=main, view=ft.WEB_BROWSER, port=8000)
+ft.app(target=main, view=ft.WEB_BROWSER, port=8000)D
