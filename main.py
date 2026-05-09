@@ -108,107 +108,6 @@ def main(page: ft.Page):
         for campo in [cedula_alq, disfraz, costo, pago]:
             campo.update()
     
-    # ========== DEVOLUCIÓN ==========
-    cedula_dev = ft.TextField(label="Cédula del cliente", width=300)
-    multa_retraso = ft.TextField(label="Multa por retraso (C$)", width=200)
-    multa_perdida = ft.TextField(label="Multa por pérdida/daño (C$)", width=200)
-    pago_saldo = ft.TextField(label="Pago de saldo pendiente (C$)", width=200, visible=False)
-    alquiler_actual = None
-    
-    def verificar_alquiler(e):
-        nonlocal alquiler_actual
-        if not cedula_dev.value:
-            resultado.value = "⚠️ Ingrese cédula"
-            resultado.color = "red"
-            resultado.update()
-            return
-        
-        alquileres = supabase.table("alquileres").select("*").eq("cedula_cliente", cedula_dev.value).is_("fecha_devolucion_real", "null").execute()
-        if not alquileres.data:
-            resultado.value = "⚠️ No hay alquileres activos para este cliente"
-            resultado.color = "red"
-            resultado.update()
-            return
-        
-        alquiler_actual = alquileres.data[0]
-        
-        fecha_esperada = date.fromisoformat(alquiler_actual["fecha_devolucion_esperada"])
-        hoy = date.today()
-        if hoy > fecha_esperada:
-            dias_retraso = (hoy - fecha_esperada).days
-            retraso_texto = f"⚠️ Retraso: {dias_retraso} días"
-            multa_retraso.visible = True
-            multa_retraso.update()
-        else:
-            retraso_texto = f"✅ A tiempo. Faltan {(fecha_esperada - hoy).days} días"
-            multa_retraso.visible = False
-            multa_retraso.update()
-        
-        saldo_actual = alquiler_actual["saldo_pendiente"]
-        pago_saldo.visible = saldo_actual > 0
-        pago_saldo.label = f"Pago de saldo pendiente (C${saldo_actual:.2f})"
-        pago_saldo.update()
-        
-        resultado.value = f"🎭 {alquiler_actual['disfraz']}\n👤 {alquiler_actual['nombre_cliente']}\n📅 Salida: {alquiler_actual['fecha_salida']}\n⏰ Devuelve: {alquiler_actual['fecha_devolucion_esperada']}\n{retraso_texto}\n💰 Costo: C${alquiler_actual['costo_total']:.2f}\n💵 Pagado: C${alquiler_actual['monto_pagado']:.2f}\n💸 Saldo pendiente: C${saldo_actual:.2f}"
-        resultado.color = "blue"
-        resultado.update()
-        
-        multa_perdida.visible = True
-        multa_perdida.update()
-    
-    def confirmar_devolucion(e):
-        nonlocal alquiler_actual
-        if not alquiler_actual:
-            resultado.value = "⚠️ Primero verifique el alquiler"
-            resultado.color = "red"
-            resultado.update()
-            return
-        
-        saldo_actual = alquiler_actual["saldo_pendiente"]
-        
-        try:
-            pago_saldo_v = float(pago_saldo.value) if pago_saldo.value else 0
-        except:
-            pago_saldo_v = 0
-        
-        if saldo_actual > 0 and pago_saldo_v < saldo_actual:
-            resultado.value = f"⚠️ Debe pagar el saldo pendiente de C${saldo_actual:.2f}"
-            resultado.color = "red"
-            resultado.update()
-            return
-        
-        try:
-            retraso = float(multa_retraso.value) if multa_retraso.value else 0
-            perdida = float(multa_perdida.value) if multa_perdida.value else 0
-        except:
-            retraso = perdida = 0
-        
-        nuevo_pagado = alquiler_actual["monto_pagado"] + pago_saldo_v
-        total_cobrado = nuevo_pagado + retraso + perdida
-        
-        supabase.table("alquileres").update({
-            "fecha_devolucion_real": date.today().isoformat(),
-            "monto_pagado": nuevo_pagado,
-            "saldo_pendiente": 0,
-            "multa_retraso": retraso,
-            "multa_perdida": perdida
-        }).eq("id", alquiler_actual["id"]).execute()
-        
-        resultado.value = f"✅ Devolución registrada\n💰 Total cobrado: C${total_cobrado:.2f}\n   Alquiler: C${alquiler_actual['monto_pagado']:.2f}\n   Pago saldo: C${pago_saldo_v:.2f}\n   Multa retraso: C${retraso:.2f}\n   Multa pérdida: C${perdida:.2f}"
-        resultado.color = "green"
-        resultado.update()
-        
-        cedula_dev.value = ""
-        multa_retraso.value = ""
-        multa_perdida.value = ""
-        pago_saldo.value = ""
-        multa_retraso.visible = False
-        multa_perdida.visible = False
-        pago_saldo.visible = False
-        for campo in [cedula_dev, multa_retraso, multa_perdida, pago_saldo]:
-            campo.update()
-        alquiler_actual = None
-    
     # ========== RESERVA ==========
     cedula_res = ft.TextField(label="Cédula del cliente", width=300)
     disfraz_res = ft.TextField(label="Nombre del disfraz", width=300)
@@ -384,20 +283,105 @@ def main(page: ft.Page):
             resultado.color = "red"
             resultado.update()
     
-    # ========== CONSULTAS ==========
-    def ver_clientes(e):
-        clientes = supabase.table("clientes").select("*").execute()
-        if not clientes.data:
-            resultado.value = "No hay clientes registrados"
-            resultado.color = "orange"
+    # ========== DEVOLUCIÓN ==========
+    cedula_dev = ft.TextField(label="Cédula del cliente", width=300)
+    multa_retraso = ft.TextField(label="Multa por retraso (C$)", width=200, visible=False)
+    multa_perdida = ft.TextField(label="Multa por pérdida/daño (C$)", width=200, visible=False)
+    pago_saldo = ft.TextField(label="Pago de saldo pendiente (C$)", width=200, visible=False)
+    alquiler_actual = None
+    
+    def verificar_alquiler(e):
+        nonlocal alquiler_actual
+        if not cedula_dev.value:
+            resultado.value = "⚠️ Ingrese cédula"
+            resultado.color = "red"
             resultado.update()
             return
-        texto = "📋 LISTA DE CLIENTES\n" + "="*45 + "\n"
-        for c in clientes.data:
-            texto += f"👤 {c['nombre']}\n"
-            texto += f"   📌 Cédula: {c['cedula']}\n"
-            texto += f"   📞 Teléfono: {c.get('telefono', 'No registrado')}\n"
-                def ver_clientes(e):
+        alquileres = supabase.table("alquileres").select("*").eq("cedula_cliente", cedula_dev.value).eq("tipo", "alquiler_normal").is_("fecha_devolucion_real", "null").execute()
+        if not alquileres.data:
+            resultado.value = "⚠️ No hay alquileres activos para este cliente"
+            resultado.color = "red"
+            resultado.update()
+            return
+        alquiler_actual = alquileres.data[0]
+        
+        fecha_esperada = date.fromisoformat(alquiler_actual["fecha_devolucion_esperada"])
+        hoy = date.today()
+        if hoy > fecha_esperada:
+            dias_retraso = (hoy - fecha_esperada).days
+            retraso_texto = f"⚠️ Retraso: {dias_retraso} días"
+            multa_retraso.visible = True
+            multa_retraso.update()
+        else:
+            retraso_texto = f"✅ A tiempo. Faltan {(fecha_esperada - hoy).days} días"
+            multa_retraso.visible = False
+            multa_retraso.update()
+        
+        saldo_actual = alquiler_actual["saldo_pendiente"]
+        pago_saldo.visible = saldo_actual > 0
+        pago_saldo.label = f"Pago de saldo pendiente (C${saldo_actual:.2f})"
+        pago_saldo.update()
+        
+        resultado.value = f"🎭 {alquiler_actual['disfraz']}\n👤 {alquiler_actual['nombre_cliente']}\n📅 Salida: {alquiler_actual['fecha_salida']}\n⏰ Devuelve: {alquiler_actual['fecha_devolucion_esperada']}\n{retraso_texto}\n💰 Costo: C${alquiler_actual['costo_total']:.2f}\n💵 Pagado: C${alquiler_actual['monto_pagado']:.2f}\n💸 Saldo pendiente: C${saldo_actual:.2f}"
+        resultado.color = "blue"
+        resultado.update()
+        multa_perdida.visible = True
+        multa_perdida.update()
+    
+    def confirmar_devolucion(e):
+        nonlocal alquiler_actual
+        if not alquiler_actual:
+            resultado.value = "⚠️ Primero verifique el alquiler"
+            resultado.color = "red"
+            resultado.update()
+            return
+        
+        saldo_actual = alquiler_actual["saldo_pendiente"]
+        try:
+            pago_saldo_v = float(pago_saldo.value) if pago_saldo.value else 0
+        except:
+            pago_saldo_v = 0
+        
+        if saldo_actual > 0 and pago_saldo_v < saldo_actual:
+            resultado.value = f"⚠️ Debe pagar el saldo pendiente de C${saldo_actual:.2f}"
+            resultado.color = "red"
+            resultado.update()
+            return
+        
+        try:
+            retraso = float(multa_retraso.value) if multa_retraso.value else 0
+            perdida = float(multa_perdida.value) if multa_perdida.value else 0
+        except:
+            retraso = perdida = 0
+        
+        nuevo_pagado = alquiler_actual["monto_pagado"] + pago_saldo_v
+        total_cobrado = nuevo_pagado + retraso + perdida
+        
+        supabase.table("alquileres").update({
+            "fecha_devolucion_real": date.today().isoformat(),
+            "monto_pagado": nuevo_pagado,
+            "saldo_pendiente": 0,
+            "multa_retraso": retraso,
+            "multa_perdida": perdida
+        }).eq("id", alquiler_actual["id"]).execute()
+        
+        resultado.value = f"✅ Devolución registrada\n💰 Total cobrado: C${total_cobrado:.2f}\n   Alquiler: C${alquiler_actual['monto_pagado']:.2f}\n   Pago saldo: C${pago_saldo_v:.2f}\n   Multa retraso: C${retraso:.2f}\n   Multa pérdida: C${perdida:.2f}"
+        resultado.color = "green"
+        resultado.update()
+        
+        cedula_dev.value = ""
+        multa_retraso.value = ""
+        multa_perdida.value = ""
+        pago_saldo.value = ""
+        multa_retraso.visible = False
+        multa_perdida.visible = False
+        pago_saldo.visible = False
+        for campo in [cedula_dev, multa_retraso, multa_perdida, pago_saldo]:
+            campo.update()
+        alquiler_actual = None
+    
+    # ========== CONSULTAS ==========
+    def ver_clientes(e):
         clientes = supabase.table("clientes").select("*").execute()
         if not clientes.data:
             resultado.value = "No hay clientes registrados"
