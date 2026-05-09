@@ -175,39 +175,45 @@ def main(page: ft.Page):
         resultado.color = "green"
         resultado.update()
     
-    # ========== INTERFAZ ==========
-    page.add(
-        ft.Container(
-            content=ft.Row([ft.Text("🎭", size=45), ft.Text("TRAJES, DISFRACES Y MUCHO MÁS", size=22, weight="bold", color="white")], alignment="center"),
-            padding=20, bgcolor="#6B21E6", border_radius=15
-        ),
-        ft.Card(ft.Container(ft.Column([
-            ft.Text("📝 REGISTRAR CLIENTE", weight="bold"),
-            cedula, nombre, telefono, direccion,
-            ft.ElevatedButton("Guardar Cliente", on_click=registrar_cliente)
-        ], spacing=15), padding=20)) if True else ft.Text(""),
-        ft.Card(ft.Container(ft.Column([
-            ft.Text("🎭 REGISTRAR ALQUILER", weight="bold"),
-            cedula_alq, disfraz_alq, ft.Row([costo_alq, pago_alq, dias_alq]),
-            ft.ElevatedButton("Registrar Alquiler", on_click=registrar_alquiler)
-        ], spacing=15), padding=20)) if True else ft.Text(""),
-        ft.Card(ft.Container(ft.Column([
-            ft.Text("🔄 REGISTRAR DEVOLUCIÓN", weight="bold"),
-            cedula_dev,
-            ft.ElevatedButton("Verificar Alquiler", on_click=verificar_devolucion),
-            ft.Row([multa_retraso, multa_perdida]),
-            ft.ElevatedButton("Confirmar Devolución", on_click=confirmar_devolucion)
-        ], spacing=15), padding=20)) if True else ft.Text(""),
-        ft.Card(ft.Container(ft.Column([
-            ft.Text("📊 CONSULTAS", weight="bold"),
-            ft.Row([
-                ft.ElevatedButton("Ver Clientes", on_click=ver_clientes),
-                ft.ElevatedButton("Ver Activos", on_click=ver_activos),
-                ft.ElevatedButton("Ver Ingresos", on_click=ver_ingresos)
-            ])
-        ], spacing=15), padding=20)) if True else ft.Text(""),
-        ft.Container(content=resultado, padding=20)
+      # ========== INTERFAZ CON SCROLL ==========
+    scroll_view = ft.Column(
+        controls=[
+            ft.Container(
+                content=ft.Row([ft.Text("🎭", size=45), ft.Text("TRAJES, DISFRACES Y MUCHO MÁS", size=22, weight="bold", color="white")], alignment="center"),
+                padding=20, bgcolor="#6B21E6", border_radius=15
+            ),
+            ft.Card(ft.Container(ft.Column([
+                ft.Text("📝 REGISTRAR CLIENTE", weight="bold"),
+                cedula, nombre, telefono, direccion,
+                ft.ElevatedButton("Guardar Cliente", on_click=registrar_cliente)
+            ], spacing=15), padding=20)),
+            ft.Card(ft.Container(ft.Column([
+                ft.Text("🎭 REGISTRAR ALQUILER", weight="bold"),
+                cedula_alq, disfraz_alq, ft.Row([costo_alq, pago_alq, dias_alq]),
+                ft.ElevatedButton("Registrar Alquiler", on_click=registrar_alquiler)
+            ], spacing=15), padding=20)),
+            ft.Card(ft.Container(ft.Column([
+                ft.Text("🔄 REGISTRAR DEVOLUCIÓN", weight="bold"),
+                cedula_dev,
+                ft.ElevatedButton("Verificar Alquiler", on_click=verificar_devolucion),
+                ft.Row([multa_retraso, multa_perdida]),
+                ft.ElevatedButton("Confirmar Devolución", on_click=confirmar_devolucion)
+            ], spacing=15), padding=20)),
+            ft.Card(ft.Container(ft.Column([
+                ft.Text("📊 CONSULTAS", weight="bold"),
+                ft.Row([
+                    ft.ElevatedButton("Ver Clientes", on_click=ver_clientes),
+                    ft.ElevatedButton("Ver Activos", on_click=ver_activos),
+                    ft.ElevatedButton("Ver Ingresos", on_click=ver_ingresos)
+                ])
+            ], spacing=15), padding=20)),
+            ft.Container(content=resultado, padding=20)
+        ],
+        spacing=20,
+        scroll=ft.ScrollMode.AUTO  
     )
+    
+    page.add(scroll_view)
 
 if __name__ == "__main__":
     ft.app(target=main, host="0.0.0.0", port=8000)
