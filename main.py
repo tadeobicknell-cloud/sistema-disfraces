@@ -624,7 +624,7 @@ def main(page: ft.Page):
     page.window_height = 950
     page.theme_mode = ft.ThemeMode.LIGHT
     page.padding = 0
-    page.bgcolor = ft.Colors.GREY_50
+    page.bgcolor = ft.Colors.GREY_50  # ← OJO: Colors con C mayúscula
 
     app = AppSistemaDisfraces()
     page.add(app.build())
