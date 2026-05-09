@@ -1,9 +1,7 @@
-import os
-os.environ["FLET_VIEW_WEB_RENDERER"] = "canvaskit"
-
 import flet as ft
 from supabase import create_client
 from datetime import date, timedelta
+from calendar import monthrange
 
 # ================= CONFIGURACIÓN SUPABASE =================
 SUPABASE_URL = "https://oyyjcqnnbvypxbuvvtst.supabase.co"
@@ -11,622 +9,613 @@ SUPABASE_KEY = "sb_publishable_R0gNH41T8sfy7v8jVbJbFw_W5-v3-cj"
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# ================= COLORES =================
-COLOR_PRIMARY = "#6B21E6"
-COLOR_SECONDARY = "#F97316"
-COLOR_SUCCESS = "#10B981"
-COLOR_DANGER = "#EF4444"
-COLOR_INFO = "#3B82F6"
-
-class AppSistemaDisfraces:
-    def __init__(self):
-        # Cliente
-        self.cedula_input = ft.TextField(label="Cédula", width=300)
-        self.nombre_input = ft.TextField(label="Nombre completo", width=300)
-        self.telefono_input = ft.TextField(label="Teléfono", width=300)
-        self.direccion_input = ft.TextField(label="Dirección", width=300)
-        
-        # Alquiler normal
-        self.cedula_alquiler = ft.TextField(label="Cédula del cliente", width=300)
-        self.disfraz_alquiler = ft.TextField(label="Nombre del disfraz", width=300)
-        self.costo_alquiler = ft.TextField(label="Costo total (C$)", width=150)
-        self.pago_alquiler = ft.TextField(label="Pago ahora (C$)", width=150)
-        self.dias_alquiler = ft.TextField(label="Días", width=100, value="3")
-        
-        # Reserva
-        self.cedula_reserva = ft.TextField(label="Cédula del cliente", width=300)
-        self.disfraz_reserva = ft.TextField(label="Nombre del disfraz", width=300)
-        self.costo_reserva = ft.TextField(label="Costo total (C$)", width=150)
-        self.pago_reserva = ft.TextField(label="Pago ahora (mínimo 50%)", width=150)
-        self.fecha_retiro_reserva = ft.TextField(label="Fecha de retiro (YYYY-MM-DD)", width=200, value=(date.today() + timedelta(days=1)).isoformat())
-        self.dias_reserva = ft.TextField(label="Días", width=100, value="3")
-        
-        # Devolución
-        self.cedula_devolucion = ft.TextField(label="Cédula del cliente", width=300)
-        self.multa_retraso_input = ft.TextField(label="💰 Multa por retraso (C$)", width=200, visible=False)
-        self.multa_perdida_input = ft.TextField(label="💰 Multa por pérdida/daño (C$)", width=200, visible=False)
-        self.detalle_alquiler_card = ft.Container(visible=False)
-        
-        # Gastos
-        self.gasto_desc = ft.TextField(label="Descripción", width=300)
-        self.gasto_monto = ft.TextField(label="Monto (C$)", width=150)
-        
-        # Gestión reservas
-        self.reserva_id_retirar = ft.TextField(label="ID de reserva", width=150)
-        self.reserva_id_cancelar = ft.TextField(label="ID de reserva", width=150)
-        
-        self.resultado_texto = ft.Text("", size=14)
-        self.alquiler_actual = None
-        
-        self.form_alquiler = ft.Column(visible=False)
-        self.form_reserva = ft.Column(visible=False)
+def main(page: ft.Page):
+    page.title = "Sistema de Disfraces"
+    page.window_width = 800
+    page.window_height = 950
+    page.padding = 20
+    page.bgcolor = "#F3F4F6"
     
-    def mostrar_resultado(self, mensaje, color):
-        self.resultado_texto.value = mensaje
-        self.resultado_texto.color = color
-        self.resultado_texto.update()
+    resultado = ft.Text("", size=14)
     
-    # ========== CLIENTES ==========
-    def registrar_cliente(self, e):
-        cedula = self.cedula_input.value
-        if not cedula:
-            self.mostrar_resultado("⚠️ Ingrese cédula", "red")
+    # ========== REGISTRAR CLIENTE ==========
+    cedula = ft.TextField(label="Cédula", width=300)
+    nombre = ft.TextField(label="Nombre completo", width=300)
+    telefono = ft.TextField(label="Teléfono", width=300)
+    direccion = ft.TextField(label="Dirección", width=300)
+    
+    def registrar_cliente(e):
+        if not cedula.value:
+            resultado.value = "⚠️ Ingrese cédula"
+            resultado.color = "red"
+            resultado.update()
             return
-        existe = supabase.table("clientes").select("*").eq("cedula", cedula).execute()
+        existe = supabase.table("clientes").select("*").eq("cedula", cedula.value).execute()
         if existe.data:
-            self.mostrar_resultado(f"⚠️ Cliente {cedula} ya existe", "red")
+            resultado.value = f"⚠️ Cliente {cedula.value} ya existe"
+            resultado.color = "red"
+            resultado.update()
             return
         nuevo = {
-            "cedula": cedula,
-            "nombre": self.nombre_input.value,
-            "telefono": self.telefono_input.value,
-            "direccion": self.direccion_input.value,
+            "cedula": cedula.value,
+            "nombre": nombre.value,
+            "telefono": telefono.value,
+            "direccion": direccion.value,
             "veces": 0
         }
         supabase.table("clientes").insert(nuevo).execute()
-        self.mostrar_resultado(f"✅ Cliente {self.nombre_input.value} registrado", COLOR_SUCCESS)
-        self.cedula_input.value = self.nombre_input.value = self.telefono_input.value = self.direccion_input.value = ""
-        for campo in [self.cedula_input, self.nombre_input, self.telefono_input, self.direccion_input]:
+        resultado.value = f"✅ Cliente {nombre.value} registrado"
+        resultado.color = "green"
+        resultado.update()
+        cedula.value = nombre.value = telefono.value = direccion.value = ""
+        for campo in [cedula, nombre, telefono, direccion]:
             campo.update()
     
-    # ========== ALQUILER NORMAL ==========
-    def registrar_alquiler_normal(self, e):
-        cedula = self.cedula_alquiler.value
-        if not cedula:
-            self.mostrar_resultado("⚠️ Ingrese cédula", "red")
+    # ========== RESERVAS ==========
+    cedula_res = ft.TextField(label="Cédula del cliente", width=300)
+    disfraz_res = ft.TextField(label="Nombre del disfraz", width=300)
+    costo_res = ft.TextField(label="Costo total (C$)", width=150)
+    pago_res = ft.TextField(label="Anticipo (mínimo 50%)", width=150)
+    fecha_retiro = ft.TextField(label="Fecha de retiro (YYYY-MM-DD)", width=200, value=(date.today() + timedelta(days=1)).isoformat())
+    dias_res = ft.TextField(label="Días de alquiler", width=100, value="3")
+    
+    def registrar_reserva(e):
+        if not cedula_res.value:
+            resultado.value = "⚠️ Ingrese cédula"
+            resultado.color = "red"
+            resultado.update()
             return
-        cliente = supabase.table("clientes").select("*").eq("cedula", cedula).execute()
+        cliente = supabase.table("clientes").select("*").eq("cedula", cedula_res.value).execute()
         if not cliente.data:
-            self.mostrar_resultado("⚠️ Cliente no encontrado", "red")
+            resultado.value = "⚠️ Cliente no encontrado"
+            resultado.color = "red"
+            resultado.update()
             return
         cliente = cliente.data[0]
         
-        disfraz = self.disfraz_alquiler.value
-        if not disfraz:
-            self.mostrar_resultado("⚠️ Ingrese disfraz", "red")
-            return
-        
         try:
-            costo = float(self.costo_alquiler.value)
-            pago = float(self.pago_alquiler.value) if self.pago_alquiler.value else 0
-            dias = int(self.dias_alquiler.value)
-        except:
-            self.mostrar_resultado("⚠️ Verifique los montos", "red")
-            return
-        
-        fecha_salida = date.today().isoformat()
-        fecha_dev = (date.today() + timedelta(days=dias)).isoformat()
-        saldo = costo - pago
-        
-        nuevo = {
-            "cedula_cliente": cedula,
-            "nombre_cliente": cliente["nombre"],
-            "disfraz": disfraz,
-            "tipo": "alquiler_normal",
-            "fecha_salida": fecha_salida,
-            "fecha_devolucion_esperada": fecha_dev,
-            "costo_total": costo,
-            "valor_pagado": pago,
-            "monto_pagado": pago,
-            "saldo_pendiente": saldo,
-            "estado_pago": "pagado_completo" if saldo <= 0 else "pago_parcial",
-            "multa_retraso": 0,
-            "multa_perdida": 0,
-            "total_pagado": pago
-        }
-        supabase.table("alquileres").insert(nuevo).execute()
-        supabase.table("clientes").update({"veces": cliente["veces"] + 1}).eq("cedula", cedula).execute()
-        
-        self.mostrar_resultado(f"✅ Alquiler registrado! Devolución: {fecha_dev}\nPagado: C${pago:.2f} | Saldo: C${saldo:.2f}", COLOR_SUCCESS)
-        self.cedula_alquiler.value = self.disfraz_alquiler.value = self.costo_alquiler.value = self.pago_alquiler.value = ""
-        for campo in [self.cedula_alquiler, self.disfraz_alquiler, self.costo_alquiler, self.pago_alquiler]:
-            campo.update()
-    
-    # ========== RESERVA ==========
-    def registrar_reserva(self, e):
-        cedula = self.cedula_reserva.value
-        if not cedula:
-            self.mostrar_resultado("⚠️ Ingrese cédula", "red")
-            return
-        cliente = supabase.table("clientes").select("*").eq("cedula", cedula).execute()
-        if not cliente.data:
-            self.mostrar_resultado("⚠️ Cliente no encontrado", "red")
-            return
-        cliente = cliente.data[0]
-        
-        disfraz = self.disfraz_reserva.value
-        if not disfraz:
-            self.mostrar_resultado("⚠️ Ingrese disfraz", "red")
-            return
-        
-        try:
-            costo = float(self.costo_reserva.value)
-            pago = float(self.pago_reserva.value) if self.pago_reserva.value else 0
-            dias = int(self.dias_reserva.value)
-            fecha_retiro = date.fromisoformat(self.fecha_retiro_reserva.value)
-            if fecha_retiro <= date.today():
-                self.mostrar_resultado("⚠️ Fecha de retiro debe ser futura", "red")
+            costo_v = float(costo_res.value) if costo_res.value else 0
+            pago_v = float(pago_res.value) if pago_res.value else 0
+            dias_v = int(dias_res.value)
+            fecha_retiro_obj = date.fromisoformat(fecha_retiro.value)
+            if fecha_retiro_obj <= date.today():
+                resultado.value = "⚠️ Fecha de retiro debe ser futura"
+                resultado.color = "red"
+                resultado.update()
                 return
         except:
-            self.mostrar_resultado("⚠️ Verifique los datos", "red")
+            resultado.value = "⚠️ Verifique los datos"
+            resultado.color = "red"
+            resultado.update()
             return
         
-        if pago < costo * 0.5:
-            self.mostrar_resultado("⚠️ Las reservas requieren mínimo 50% de anticipo", "red")
+        if pago_v < costo_v * 0.5:
+            resultado.value = f"⚠️ El anticipo debe ser al menos el 50% (mínimo C${costo_v * 0.5:.2f})"
+            resultado.color = "red"
+            resultado.update()
             return
         
-        fecha_reserva = date.today().isoformat()
-        fecha_retiro_str = fecha_retiro.isoformat()
-        fecha_dev = (fecha_retiro + timedelta(days=dias)).isoformat()
-        saldo = costo - pago
+        fecha_dev = (fecha_retiro_obj + timedelta(days=dias_v)).isoformat()
+        saldo = costo_v - pago_v
         
         nuevo = {
-            "cedula_cliente": cedula,
+            "cedula_cliente": cedula_res.value,
             "nombre_cliente": cliente["nombre"],
-            "disfraz": disfraz,
+            "disfraz": disfraz_res.value,
             "tipo": "reserva",
-            "fecha_reserva": fecha_reserva,
-            "fecha_retiro": fecha_retiro_str,
-            "fecha_salida": fecha_retiro_str,
+            "fecha_retiro": fecha_retiro.value,
+            "fecha_salida": fecha_retiro.value,
             "fecha_devolucion_esperada": fecha_dev,
-            "costo_total": costo,
-            "valor_pagado": pago,
-            "monto_pagado": pago,
+            "costo_total": costo_v,
+            "monto_pagado": pago_v,
             "saldo_pendiente": saldo,
-            "estado_pago": "pago_parcial",
             "estado_reserva": "activa",
             "multa_retraso": 0,
-            "multa_perdida": 0,
-            "total_pagado": pago
+            "multa_perdida": 0
         }
         supabase.table("alquileres").insert(nuevo).execute()
-        supabase.table("clientes").update({"veces": cliente["veces"] + 1}).eq("cedula", cedula).execute()
+        supabase.table("clientes").update({"veces": cliente["veces"] + 1}).eq("cedula", cedula_res.value).execute()
         
-        self.mostrar_resultado(f"✅ Reserva registrada!\nRetiro: {fecha_retiro_str}\nPagado: C${pago:.2f} | Saldo: C${saldo:.2f}", COLOR_SUCCESS)
-        self.cedula_reserva.value = self.disfraz_reserva.value = self.costo_reserva.value = self.pago_reserva.value = ""
-        for campo in [self.cedula_reserva, self.disfraz_reserva, self.costo_reserva, self.pago_reserva]:
+        resultado.value = f"✅ Reserva registrada!\n🎭 {disfraz_res.value}\n📅 Retiro: {fecha_retiro.value}\n⏰ Devuelve: {fecha_dev}\n💰 Anticipo: C${pago_v:.2f} | Saldo: C${saldo:.2f}"
+        resultado.color = "green"
+        resultado.update()
+        
+        cedula_res.value = disfraz_res.value = costo_res.value = pago_res.value = ""
+        for campo in [cedula_res, disfraz_res, costo_res, pago_res]:
             campo.update()
     
-    # ========== DEVOLUCIÓN ==========
-    def verificar_devolucion(self, e):
-        cedula = self.cedula_devolucion.value
-        if not cedula:
-            self.mostrar_resultado("⚠️ Ingrese la cédula", "red")
-            return
-        
-        alquileres = supabase.table("alquileres").select("*").eq("cedula_cliente", cedula).eq("tipo", "alquiler_normal").is_("fecha_devolucion_real", "null").execute()
-        
-        if not alquileres.data:
-            self.mostrar_resultado("⚠️ No hay alquileres activos para este cliente", "red")
-            self.detalle_alquiler_card.visible = False
-            self.detalle_alquiler_card.update()
-            return
-        
-        self.alquiler_actual = alquileres.data[0]
-        
-        hoy = date.today()
-        fecha_esperada = date.fromisoformat(self.alquiler_actual["fecha_devolucion_esperada"])
-        
-        if hoy > fecha_esperada:
-            dias_retraso = (hoy - fecha_esperada).days
-            dias_retraso_texto = f"⚠️ RETRASO: {dias_retraso} días"
-            self.multa_retraso_input.visible = True
-            self.multa_retraso_input.label = f"💰 Multa por {dias_retraso} días de retraso (C$)"
-        else:
-            dias_retraso = 0
-            dias_retraso_texto = f"✅ A TIEMPO: Faltan {(fecha_esperada - hoy).days} días"
-            self.multa_retraso_input.visible = False
-        
-        info_pago = ""
-        if self.alquiler_actual["saldo_pendiente"] > 0:
-            info_pago = f"💰 SALDO PENDIENTE: C${self.alquiler_actual['saldo_pendiente']:.2f} (DEBE PAGAR PARA DEVOLVER)"
-        
-        detalle_content = ft.Column([
-            ft.Text(f"🎭 DISFRAZ: {self.alquiler_actual['disfraz']}", size=18, weight="bold", color=COLOR_PRIMARY),
-            ft.Text(f"👤 Cliente: {self.alquiler_actual['nombre_cliente']}"),
-            ft.Text(f"📅 Fecha salida: {self.alquiler_actual['fecha_salida']}"),
-            ft.Text(f"⏰ Devolución esperada: {self.alquiler_actual['fecha_devolucion_esperada']}"),
-            ft.Text(dias_retraso_texto, color=COLOR_DANGER if dias_retraso > 0 else COLOR_SUCCESS),
-            ft.Text(f"💰 Costo total: C${self.alquiler_actual['costo_total']:.2f}"),
-            ft.Text(f"💵 Pagado: C${self.alquiler_actual['monto_pagado']:.2f}"),
-            ft.Text(info_pago, color=COLOR_DANGER if self.alquiler_actual["saldo_pendiente"] > 0 else COLOR_SUCCESS),
-            ft.Divider(),
-            ft.Text("🔍 Verifique que todas las piezas del disfraz estén completas", italic=True, size=12),
-        ], spacing=8)
-        
-        self.detalle_alquiler_card.content = ft.Card(
-            content=ft.Container(content=detalle_content, padding=15, bgcolor=ft.Colors.WHITE),
-            elevation=3
-        )
-        self.detalle_alquiler_card.visible = True
-        self.detalle_alquiler_card.update()
-        
-        self.multa_retraso_input.value = ""
-        self.multa_perdida_input.visible = True
-        self.multa_perdida_input.value = ""
-        
-        self.multa_retraso_input.update()
-        self.multa_perdida_input.update()
-        
-        if self.alquiler_actual["saldo_pendiente"] > 0:
-            self.mostrar_resultado(f"⚠️ El cliente debe pagar el saldo pendiente de C${self.alquiler_actual['saldo_pendiente']:.2f} antes de devolver", "red")
-        else:
-            self.mostrar_resultado("Ingrese montos adicionales por retraso o pérdida si corresponde", COLOR_INFO)
-    
-    def confirmar_devolucion(self, e):
-        if not self.alquiler_actual:
-            self.mostrar_resultado("⚠️ Primero verifique el alquiler", "red")
-            return
-        
-        if self.alquiler_actual["saldo_pendiente"] > 0:
-            self.mostrar_resultado(f"⚠️ El cliente debe pagar el saldo pendiente de C${self.alquiler_actual['saldo_pendiente']:.2f} antes de devolver", "red")
-            return
-        
-        try:
-            multa_retraso = float(self.multa_retraso_input.value) if self.multa_retraso_input.value else 0
-        except:
-            multa_retraso = 0
-        
-        try:
-            multa_perdida = float(self.multa_perdida_input.value) if self.multa_perdida_input.value else 0
-        except:
-            multa_perdida = 0
-        
-        total_adicional = multa_retraso + multa_perdida
-        total_pagado = self.alquiler_actual["monto_pagado"] + total_adicional
-        
-        supabase.table("alquileres").update({
-            "fecha_devolucion_real": date.today().isoformat(),
-            "multa_retraso": multa_retraso,
-            "multa_perdida": multa_perdida,
-            "total_pagado": total_pagado,
-            "saldo_pendiente": 0,
-            "estado_pago": "pagado_completo"
-        }).eq("id", self.alquiler_actual["id"]).execute()
-        
-        self.mostrar_resultado(
-            f"✅ Devolución registrada\n"
-            f"   Alquiler: C${self.alquiler_actual['costo_total']:.2f}\n"
-            f"   Pagado antes: C${self.alquiler_actual['monto_pagado']:.2f}\n"
-            f"   Multa retraso: C${multa_retraso:.2f}\n"
-            f"   Multa pérdida: C${multa_perdida:.2f}\n"
-            f"   TOTAL COBRADO: C${total_pagado:.2f}",
-            COLOR_SUCCESS
-        )
-        
-        self.cedula_devolucion.value = ""
-        self.cedula_devolucion.update()
-        self.multa_retraso_input.visible = False
-        self.multa_perdida_input.visible = False
-        self.detalle_alquiler_card.visible = False
-        self.multa_retraso_input.update()
-        self.multa_perdida_input.update()
-        self.detalle_alquiler_card.update()
-        self.alquiler_actual = None
-    
-    # ========== RESERVAS ACTIVAS ==========
-    def ver_reservas_activas(self, e):
+    def ver_reservas_activas(e):
         reservas = supabase.table("alquileres").select("*").eq("tipo", "reserva").eq("estado_reserva", "activa").is_("fecha_devolucion_real", "null").execute()
         if not reservas.data:
-            self.mostrar_resultado("📭 No hay reservas activas", COLOR_INFO)
+            resultado.value = "📭 No hay reservas activas"
+            resultado.color = "blue"
+            resultado.update()
             return
-        resultado = "📋 RESERVAS ACTIVAS\n" + "="*35 + "\n"
+        texto = "📋 RESERVAS ACTIVAS\n" + "="*45 + "\n"
         for r in reservas.data:
-            resultado += f"ID: {r['id']} | {r['nombre_cliente']}\n"
-            resultado += f"   🎭 {r['disfraz']} | Retiro: {r['fecha_retiro']}\n"
-            resultado += f"   💵 Pagado: C${r['monto_pagado']:.2f} | Saldo: C${r['saldo_pendiente']:.2f}\n---\n"
-        self.mostrar_resultado(resultado, COLOR_INFO)
+            texto += f"ID: {r['id']} | 👤 {r['nombre_cliente']}\n"
+            texto += f"   🎭 {r['disfraz']} | Retiro: {r['fecha_retiro']}\n"
+            texto += f"   💰 Anticipo: C${r['monto_pagado']:.2f} | Saldo: C${r['saldo_pendiente']:.2f}\n---\n"
+        resultado.value = texto
+        resultado.color = "blue"
+        resultado.update()
     
-    def retirar_reserva(self, e):
-        reserva_id = self.reserva_id_retirar.value
-        if not reserva_id:
-            self.mostrar_resultado("⚠️ Ingrese ID de reserva", "red")
+    # ========== RETIRAR RESERVA (con pago adicional) ==========
+    reserva_id_retirar = ft.TextField(label="ID de reserva", width=150)
+    pago_retiro = ft.TextField(label="Pago adicional al retirar (C$)", width=200)
+    
+    def retirar_reserva(e):
+        if not reserva_id_retirar.value:
+            resultado.value = "⚠️ Ingrese ID de reserva"
+            resultado.color = "red"
+            resultado.update()
             return
         try:
-            reserva = supabase.table("alquileres").select("*").eq("id", int(reserva_id)).eq("tipo", "reserva").eq("estado_reserva", "activa").execute()
+            reserva = supabase.table("alquileres").select("*").eq("id", int(reserva_id_retirar.value)).eq("tipo", "reserva").eq("estado_reserva", "activa").execute()
             if not reserva.data:
-                self.mostrar_resultado("⚠️ Reserva no encontrada o ya cancelada", "red")
+                resultado.value = "⚠️ Reserva no encontrada"
+                resultado.color = "red"
+                resultado.update()
+                return
+            reserva = reserva.data[0]
+            
+            try:
+                pago_adicional = float(pago_retiro.value) if pago_retiro.value else 0
+            except:
+                pago_adicional = 0
+            
+            nuevo_pagado = reserva["monto_pagado"] + pago_adicional
+            nuevo_saldo = reserva["costo_total"] - nuevo_pagado
+            
+            if nuevo_saldo < 0:
+                resultado.value = f"⚠️ El pago excede el saldo. Saldo pendiente: C${reserva['saldo_pendiente']:.2f}"
+                resultado.color = "red"
+                resultado.update()
                 return
             
             supabase.table("alquileres").update({
                 "tipo": "alquiler_normal",
                 "estado_reserva": None,
+                "monto_pagado": nuevo_pagado,
+                "saldo_pendiente": nuevo_saldo,
                 "fecha_salida": date.today().isoformat(),
                 "fecha_devolucion_esperada": (date.today() + timedelta(days=3)).isoformat()
-            }).eq("id", reserva_id).execute()
+            }).eq("id", int(reserva_id_retirar.value)).execute()
             
-            self.mostrar_resultado(f"✅ Reserva #{reserva_id} convertida a alquiler activo", COLOR_SUCCESS)
-            self.reserva_id_retirar.value = ""
-            self.reserva_id_retirar.update()
+            resultado.value = f"✅ Reserva #{reserva_id_retirar.value} retirada\n💰 Pagado ahora: C${pago_adicional:.2f}\n💵 Total pagado: C${nuevo_pagado:.2f} | Saldo: C${nuevo_saldo:.2f}"
+            resultado.color = "green"
+            resultado.update()
+            reserva_id_retirar.value = ""
+            pago_retiro.value = ""
+            reserva_id_retirar.update()
+            pago_retiro.update()
         except Exception as error:
-            self.mostrar_resultado(f"❌ Error: {error}", "red")
+            resultado.value = f"❌ Error: {error}"
+            resultado.color = "red"
+            resultado.update()
     
-    def cancelar_reserva(self, e):
-        reserva_id = self.reserva_id_cancelar.value
-        if not reserva_id:
-            self.mostrar_resultado("⚠️ Ingrese ID de reserva", "red")
+    # ========== CANCELAR RESERVA ==========
+    reserva_id_cancelar = ft.TextField(label="ID de reserva", width=150)
+    
+    def cancelar_reserva(e):
+        if not reserva_id_cancelar.value:
+            resultado.value = "⚠️ Ingrese ID de reserva"
+            resultado.color = "red"
+            resultado.update()
             return
         try:
-            reserva = supabase.table("alquileres").select("*").eq("id", int(reserva_id)).eq("tipo", "reserva").eq("estado_reserva", "activa").execute()
+            reserva = supabase.table("alquileres").select("*").eq("id", int(reserva_id_cancelar.value)).eq("tipo", "reserva").eq("estado_reserva", "activa").execute()
             if not reserva.data:
-                self.mostrar_resultado("⚠️ Reserva no encontrada", "red")
+                resultado.value = "⚠️ Reserva no encontrada"
+                resultado.color = "red"
+                resultado.update()
                 return
+            reserva = reserva.data[0]
             
             fecha_retiro = date.fromisoformat(reserva["fecha_retiro"])
             if (fecha_retiro - date.today()).days < 1:
-                self.mostrar_resultado("⚠️ No se puede cancelar (menos de 1 día antes del retiro)", "red")
+                resultado.value = "⚠️ No se puede cancelar (menos de 1 día antes del retiro)"
+                resultado.color = "red"
+                resultado.update()
                 return
             
-            supabase.table("alquileres").delete().eq("id", reserva_id).execute()
-            self.mostrar_resultado(f"✅ Reserva #{reserva_id} cancelada. El pago NO se registra como ingreso.", COLOR_INFO)
-            self.reserva_id_cancelar.value = ""
-            self.reserva_id_cancelar.update()
+            supabase.table("alquileres").delete().eq("id", int(reserva_id_cancelar.value)).execute()
+            resultado.value = f"✅ Reserva #{reserva_id_cancelar.value} cancelada. El anticipo NO se registra como ingreso."
+            resultado.color = "green"
+            resultado.update()
+            reserva_id_cancelar.value = ""
+            reserva_id_cancelar.update()
         except Exception as error:
-            self.mostrar_resultado(f"❌ Error: {error}", "red")
+            resultado.value = f"❌ Error: {error}"
+            resultado.color = "red"
+            resultado.update()
+    
+    # ========== ALQUILER NORMAL (con opción de pago al devolver) ==========
+    cedula_alq = ft.TextField(label="Cédula del cliente", width=300)
+    disfraz_alq = ft.TextField(label="Nombre del disfraz", width=300)
+    costo_alq = ft.TextField(label="Costo total (C$)", width=150)
+    pago_alq = ft.TextField(label="Pago ahora (C$)", width=150)
+    dias_alq = ft.TextField(label="Días", width=100, value="3")
+    
+    def registrar_alquiler(e):
+        if not cedula_alq.value:
+            resultado.value = "⚠️ Ingrese cédula"
+            resultado.color = "red"
+            resultado.update()
+            return
+        cliente = supabase.table("clientes").select("*").eq("cedula", cedula_alq.value).execute()
+        if not cliente.data:
+            resultado.value = "⚠️ Cliente no encontrado"
+            resultado.color = "red"
+            resultado.update()
+            return
+        cliente = cliente.data[0]
+        
+        try:
+            costo_v = float(costo_alq.value) if costo_alq.value else 0
+            pago_v = float(pago_alq.value) if pago_alq.value else 0
+            dias_v = int(dias_alq.value)
+        except:
+            resultado.value = "⚠️ Verifique los montos"
+            resultado.color = "red"
+            resultado.update()
+            return
+        
+        saldo = costo_v - pago_v
+        fecha_dev = (date.today() + timedelta(days=dias_v)).isoformat()
+        
+        nuevo = {
+            "cedula_cliente": cedula_alq.value,
+            "nombre_cliente": cliente["nombre"],
+            "disfraz": disfraz_alq.value,
+            "tipo": "alquiler_normal",
+            "fecha_salida": date.today().isoformat(),
+            "fecha_devolucion_esperada": fecha_dev,
+            "costo_total": costo_v,
+            "monto_pagado": pago_v,
+            "saldo_pendiente": saldo,
+            "multa_retraso": 0,
+            "multa_perdida": 0
+        }
+        supabase.table("alquileres").insert(nuevo).execute()
+        supabase.table("clientes").update({"veces": cliente["veces"] + 1}).eq("cedula", cedula_alq.value).execute()
+        
+        resultado.value = f"✅ Alquiler registrado\n🎭 {disfraz_alq.value}\n⏰ Devuelve: {fecha_dev}\n💵 Pagado ahora: C${pago_v:.2f} | Saldo pendiente: C${saldo:.2f}"
+        resultado.color = "green"
+        resultado.update()
+        
+        cedula_alq.value = disfraz_alq.value = costo_alq.value = pago_alq.value = ""
+        for campo in [cedula_alq, disfraz_alq, costo_alq, pago_alq]:
+            campo.update()
+    
+    # ========== DEVOLUCIÓN (con pago de saldo pendiente y multas) ==========
+    cedula_dev = ft.TextField(label="Cédula del cliente", width=300)
+    multa_retraso = ft.TextField(label="Multa por retraso (C$)", width=200, visible=False)
+    multa_perdida = ft.TextField(label="Multa por pérdida/daño (C$)", width=200, visible=False)
+    pago_saldo = ft.TextField(label="Pago de saldo pendiente (C$)", width=200, visible=False)
+    alquiler_actual = None
+    
+    def verificar_devolucion(e):
+        nonlocal alquiler_actual
+        if not cedula_dev.value:
+            resultado.value = "⚠️ Ingrese cédula"
+            resultado.color = "red"
+            resultado.update()
+            return
+        
+        alquileres = supabase.table("alquileres").select("*").eq("cedula_cliente", cedula_dev.value).eq("tipo", "alquiler_normal").is_("fecha_devolucion_real", "null").execute()
+        if not alquileres.data:
+            resultado.value = "⚠️ No hay alquileres activos para este cliente"
+            resultado.color = "red"
+            resultado.update()
+            return
+        
+        alquiler_actual = alquileres.data[0]
+        
+        fecha_esperada = date.fromisoformat(alquiler_actual["fecha_devolucion_esperada"])
+        hoy = date.today()
+        if hoy > fecha_esperada:
+            dias_retraso = (hoy - fecha_esperada).days
+            retraso_texto = f"⚠️ Retraso: {dias_retraso} días"
+            multa_retraso.visible = True
+            multa_retraso.update()
+        else:
+            retraso_texto = f"✅ A tiempo. Faltan {(fecha_esperada - hoy).days} días"
+            multa_retraso.visible = False
+            multa_retraso.update()
+        
+        saldo_actual = alquiler_actual["saldo_pendiente"]
+        pago_saldo.visible = saldo_actual > 0
+        pago_saldo.label = f"Pago de saldo pendiente (C${saldo_actual:.2f})"
+        pago_saldo.update()
+        
+        resultado.value = f"🎭 {alquiler_actual['disfraz']}\n👤 {alquiler_actual['nombre_cliente']}\n📅 Salida: {alquiler_actual['fecha_salida']}\n⏰ Devuelve: {alquiler_actual['fecha_devolucion_esperada']}\n{retraso_texto}\n💰 Costo: C${alquiler_actual['costo_total']:.2f}\n💵 Pagado: C${alquiler_actual['monto_pagado']:.2f}\n💸 Saldo pendiente: C${saldo_actual:.2f}"
+        resultado.color = "blue"
+        resultado.update()
+        
+        multa_perdida.visible = True
+        multa_perdida.update()
+    
+    def confirmar_devolucion(e):
+        nonlocal alquiler_actual
+        if not alquiler_actual:
+            resultado.value = "⚠️ Primero verifique el alquiler"
+            resultado.color = "red"
+            resultado.update()
+            return
+        
+        saldo_actual = alquiler_actual["saldo_pendiente"]
+        
+        try:
+            pago_saldo_v = float(pago_saldo.value) if pago_saldo.value else 0
+        except:
+            pago_saldo_v = 0
+        
+        if saldo_actual > 0 and pago_saldo_v < saldo_actual:
+            resultado.value = f"⚠️ Debe pagar el saldo pendiente de C${saldo_actual:.2f}"
+            resultado.color = "red"
+            resultado.update()
+            return
+        
+        try:
+            retraso = float(multa_retraso.value) if multa_retraso.value else 0
+            perdida = float(multa_perdida.value) if multa_perdida.value else 0
+        except:
+            retraso = perdida = 0
+        
+        nuevo_pagado = alquiler_actual["monto_pagado"] + pago_saldo_v
+        total_cobrado = nuevo_pagado + retraso + perdida
+        
+        supabase.table("alquileres").update({
+            "fecha_devolucion_real": date.today().isoformat(),
+            "monto_pagado": nuevo_pagado,
+            "saldo_pendiente": 0,
+            "multa_retraso": retraso,
+            "multa_perdida": perdida
+        }).eq("id", alquiler_actual["id"]).execute()
+        
+        resultado.value = f"✅ Devolución registrada\n💰 Total cobrado: C${total_cobrado:.2f}\n   Alquiler: C${alquiler_actual['monto_pagado']:.2f}\n   Pago saldo: C${pago_saldo_v:.2f}\n   Multa retraso: C${retraso:.2f}\n   Multa pérdida: C${perdida:.2f}"
+        resultado.color = "green"
+        resultado.update()
+        
+        cedula_dev.value = ""
+        multa_retraso.value = ""
+        multa_perdida.value = ""
+        pago_saldo.value = ""
+        multa_retraso.visible = False
+        multa_perdida.visible = False
+        pago_saldo.visible = False
+        for campo in [cedula_dev, multa_retraso, multa_perdida, pago_saldo]:
+            campo.update()
+        alquiler_actual = None
     
     # ========== GASTOS ==========
-    def registrar_gasto(self, e):
-        desc = self.gasto_desc.value
-        monto = self.gasto_monto.value
-        if not desc or not monto:
-            self.mostrar_resultado("⚠️ Complete descripción y monto", "red")
+    gasto_desc = ft.TextField(label="Descripción del gasto", width=300)
+    gasto_monto = ft.TextField(label="Monto (C$)", width=150)
+    
+    def registrar_gasto(e):
+        if not gasto_desc.value or not gasto_monto.value:
+            resultado.value = "⚠️ Complete descripción y monto"
+            resultado.color = "red"
+            resultado.update()
             return
         try:
-            monto = float(monto)
+            monto_v = float(gasto_monto.value)
         except:
-            self.mostrar_resultado("⚠️ Monto inválido", "red")
+            resultado.value = "⚠️ Monto inválido"
+            resultado.color = "red"
+            resultado.update()
             return
-        nuevo = {"descripcion": desc, "monto": monto, "fecha": date.today().isoformat()}
+        nuevo = {
+            "descripcion": gasto_desc.value,
+            "monto": monto_v,
+            "fecha": date.today().isoformat()
+        }
         supabase.table("gastos").insert(nuevo).execute()
-        self.mostrar_resultado(f"✅ Gasto registrado: {desc} - C${monto:.2f}", COLOR_SUCCESS)
-        self.gasto_desc.value = self.gasto_monto.value = ""
-        self.gasto_desc.update(), self.gasto_monto.update()
+        resultado.value = f"✅ Gasto registrado: {gasto_desc.value} - C${monto_v:.2f}"
+        resultado.color = "green"
+        resultado.update()
+        gasto_desc.value = ""
+        gasto_monto.value = ""
+        gasto_desc.update()
+        gasto_monto.update()
     
     # ========== CONSULTAS ==========
-    def ver_clientes(self, e):
+    def ver_clientes(e):
         clientes = supabase.table("clientes").select("*").execute()
         if not clientes.data:
-            self.mostrar_resultado("No hay clientes", "orange")
+            resultado.value = "No hay clientes registrados"
+            resultado.color = "orange"
+            resultado.update()
             return
-        texto = "📋 CLIENTES\n" + "="*35 + "\n"
+        
+        texto = "📋 LISTA DE CLIENTES\n" + "="*45 + "\n"
         for c in clientes.data:
-            texto += f"📌 {c['nombre']} - {c['cedula']}\n"
-            texto += f"   📞 Teléfono: {c['telefono'] if c['telefono'] else 'No registrado'}\n"
-            texto += f"   📍 Dirección: {c['direccion'] if c['direccion'] else 'No registrada'}\n"
-            texto += f"   📊 {c['veces']} alquileres\n---\n"
-        self.mostrar_resultado(texto, COLOR_INFO)
+            texto += f"👤 {c['nombre']}\n"
+            texto += f"   📌 Cédula: {c['cedula']}\n"
+            texto += f"   📞 Teléfono: {c.get('telefono', 'No registrado')}\n"
+            texto += f"   📍 Dirección: {c.get('direccion', 'No registrada')}\n"
+            texto += f"   📊 Alquileres: {c['veces']}\n---\n"
+        resultado.value = texto
+        resultado.color = "blue"
+        resultado.update()
     
-    def ver_activos(self, e):
+    def ver_activos(e):
         alquileres = supabase.table("alquileres").select("*").eq("tipo", "alquiler_normal").is_("fecha_devolucion_real", "null").execute()
         if not alquileres.data:
-            self.mostrar_resultado("✅ No hay alquileres activos", COLOR_SUCCESS)
+            resultado.value = "✅ No hay alquileres activos"
+            resultado.color = "green"
+            resultado.update()
             return
-        texto = "🎭 ALQUILERES ACTIVOS\n" + "="*35 + "\n"
+        
+        texto = "🎭 ALQUILERES ACTIVOS\n" + "="*45 + "\n"
         for a in alquileres.data:
-            texto += f"👤 {a['nombre_cliente']} - {a['disfraz']}\n"
+            texto += f"👤 {a['nombre_cliente']}\n"
+            texto += f"   🎭 {a['disfraz']}\n"
             texto += f"   ⏰ Devuelve: {a['fecha_devolucion_esperada']}\n"
-            texto += f"   💰 Pagado: C${a['monto_pagado']:.2f} | Saldo: C${a['saldo_pendiente']:.2f}\n---\n"
-        self.mostrar_resultado(texto, COLOR_INFO)
+            texto += f"   💰 Pagado: C${a['monto_pagado']:.2f}\n"
+            texto += f"   💸 Saldo: C${a['saldo_pendiente']:.2f}\n---\n"
+        resultado.value = texto
+        resultado.color = "blue"
+        resultado.update()
     
-    def ver_moras(self, e):
+    def ver_moras(e):
         hoy = date.today().isoformat()
         moras = supabase.table("alquileres").select("*").eq("tipo", "alquiler_normal").is_("fecha_devolucion_real", "null").lt("fecha_devolucion_esperada", hoy).execute()
         if not moras.data:
-            self.mostrar_resultado("✅ No hay disfraces en mora", COLOR_SUCCESS)
+            resultado.value = "✅ No hay disfraces en mora"
+            resultado.color = "green"
+            resultado.update()
             return
-        texto = "🔴 DISFRACES EN MORA\n" + "="*35 + "\n"
+        
+        texto = "🔴 DISFRACES EN MORA\n" + "="*45 + "\n"
         for m in moras.data:
-            texto += f"👤 {m['nombre_cliente']} - {m['disfraz']}\n"
-            texto += f"   ⏰ Devuelve: {m['fecha_devolucion_esperada']}\n---\n"
-        self.mostrar_resultado(texto, COLOR_DANGER)
+            texto += f"👤 {m['nombre_cliente']}\n"
+            texto += f"   🎭 {m['disfraz']}\n"
+            texto += f"   ⏰ Debía devolver: {m['fecha_devolucion_esperada']}\n---\n"
+        resultado.value = texto
+        resultado.color = "red"
+        resultado.update()
     
-    def ver_ingresos(self, e):
+    # ========== REPORTE DE INGRESOS (con calendario) ==========
+    fecha_calendario = ft.TextField(label="Fecha (YYYY-MM-DD)", width=200, value=date.today().isoformat())
+    
+    def ver_ingresos_por_fecha(e):
+        try:
+            fecha_sel = date.fromisoformat(fecha_calendario.value)
+        except:
+            resultado.value = "⚠️ Formato de fecha inválido. Use YYYY-MM-DD"
+            resultado.color = "red"
+            resultado.update()
+            return
+        
         alquileres = supabase.table("alquileres").select("*").execute()
-        gastos = supabase.table("gastos").select("*").execute()
-        hoy = date.today()
+        gastos = supabase.table("gastos").select("monto").execute()
         
-        ingresos_hoy = sum(a["monto_pagado"] for a in alquileres.data if a["fecha_salida"] == hoy.isoformat() and a.get("estado_reserva") != "cancelada")
-        total_ingresos = sum(a["monto_pagado"] for a in alquileres.data if a.get("estado_reserva") != "cancelada")
-        total_gastos = sum(g["monto"] for g in gastos.data)
-        ganancia = total_ingresos - total_gastos
+        ingresos_dia = sum(a["monto_pagado"] for a in alquileres.data if a["fecha_salida"] == fecha_sel.isoformat())
         
-        resultado = f"""
+        # Calcular semana (lunes a domingo)
+        lunes = fecha_sel - timedelta(days=fecha_sel.weekday())
+        domingo = lunes + timedelta(days=6)
+        ingresos_semana = sum(a["monto_pagado"] for a in alquileres.data if lunes <= date.fromisoformat(a["fecha_salida"]) <= domingo)
+        
+        # Calcular mes
+        primer_dia_mes = date(fecha_sel.year, fecha_sel.month, 1)
+        ultimo_dia_mes = date(fecha_sel.year, fecha_sel.month, monthrange(fecha_sel.year, fecha_sel.month)[1])
+        ingresos_mes = sum(a["monto_pagado"] for a in alquileres.data if primer_dia_mes <= date.fromisoformat(a["fecha_salida"]) <= ultimo_dia_mes)
+        gastos_mes = sum(g["monto"] for g in gastos.data if primer_dia_mes <= date.fromisoformat(g["fecha"]) <= ultimo_dia_mes)
+        
+        total_ingresos = sum(a["monto_pagado"] for a in alquileres.data)
+        total_gastos = sum(g["monto"] for g in gastos.data) if gastos.data else 0
+        ganancia_total = total_ingresos - total_gastos
+        
+        lunes_str = lunes.strftime("%d/%m/%Y")
+        domingo_str = domingo.strftime("%d/%m/%Y")
+        mes_str = fecha_sel.strftime("%B %Y")
+        
+        texto = f"""
 🏪 TRAJES, DISFRACES Y MUCHO MÁS
-{'='*35}
+{'='*50}
 
-📆 INGRESOS DE HOY: C${ingresos_hoy:.2f}
+📆 INGRESOS POR FECHA
+   Fecha: {fecha_sel.strftime('%d/%m/%Y')}
+   💰 Total del día: C${ingresos_dia:.2f}
 
-{'='*35}
-💰 TOTAL INGRESOS: C${total_ingresos:.2f}
-💸 TOTAL GASTOS: C${total_gastos:.2f}
-📈 GANANCIA REAL: C${ganancia:.2f}
+📅 INGRESOS DE LA SEMANA
+   Período: {lunes_str} al {domingo_str}
+   💰 Total de la semana: C${ingresos_semana:.2f}
+
+📆 CIERRE MENSUAL - {mes_str}
+   💰 Ingresos del mes: C${ingresos_mes:.2f}
+   💸 Gastos del mes: C${gastos_mes:.2f}
+   📊 Flujo del mes: C${ingresos_mes - gastos_mes:.2f}
+
+{'='*50}
+💰 TOTAL INGRESOS (histórico): C${total_ingresos:.2f}
+💸 TOTAL GASTOS (histórico): C${total_gastos:.2f}
+📈 GANANCIA REAL TOTAL: C${ganancia_total:.2f}
 """
-        color = COLOR_SUCCESS if ganancia >= 0 else COLOR_DANGER
-        self.mostrar_resultado(resultado, color)
+        resultado.value = texto
+        resultado.color = "green" if ganancia_total >= 0 else "red"
+        resultado.update()
     
     # ========== INTERFAZ ==========
-    def build(self):
-        header = ft.Container(
-            content=ft.Row([
-                ft.Text("🎭", size=40),
-                ft.Column([
-                    ft.Text("TRAJES, DISFRACES Y MUCHO MÁS", size=24, weight="bold", color=COLOR_PRIMARY),
-                    ft.Text("Sistema de Gestión", size=14, color=COLOR_SECONDARY),
-                ], spacing=0),
-            ], alignment=ft.MainAxisAlignment.CENTER),
+    page.add(
+        ft.Container(
+            content=ft.Row([ft.Text("🎭", size=45), ft.Column([
+                ft.Text("TRAJES, DISFRACES Y MUCHO MÁS", size=22, weight="bold", color="white"),
+                ft.Text("Sistema de Gestión", size=14, color="white")
+            ], spacing=0)], alignment="center"),
             padding=20,
-            bgcolor=ft.Colors.WHITE,
-            border_radius=15,
-            margin=0,
-        )
+            bgcolor="#6B21E6",
+            border_radius=15
+        ),
         
-        clientes_card = ft.Card(
-            content=ft.Container(
-                content=ft.Column([
-                    ft.Text("📝 REGISTRAR CLIENTE", size=18, weight="bold", color=COLOR_PRIMARY),
-                    self.cedula_input, self.nombre_input, self.telefono_input, self.direccion_input,
-                    ft.ElevatedButton("Guardar Cliente", on_click=self.registrar_cliente, bgcolor=COLOR_INFO, color="white"),
-                ], spacing=15),
-                padding=20,
-            ),
-            elevation=3,
-        )
+        # Clientes
+        ft.Card(ft.Container(ft.Column([
+            ft.Text("📝 REGISTRAR CLIENTE", size=18, weight="bold", color="#6B21E6"),
+            cedula, nombre, telefono, direccion,
+            ft.ElevatedButton("Guardar Cliente", on_click=registrar_cliente, bgcolor="#3B82F6", color="white")
+        ], spacing=15), padding=20), elevation=3),
         
-        btn_alquiler = ft.ElevatedButton("🎭 REGISTRAR ALQUILER", on_click=self.mostrar_form_alquiler, bgcolor=COLOR_SECONDARY, color="white", width=250)
-        btn_reserva = ft.ElevatedButton("📅 REGISTRAR RESERVA", on_click=self.mostrar_form_reserva, bgcolor=COLOR_PRIMARY, color="white", width=250)
+        # Reservas
+        ft.Card(ft.Container(ft.Column([
+            ft.Text("📅 REGISTRAR RESERVA (50% mínimo)", size=18, weight="bold", color="#6B21E6"),
+            cedula_res, disfraz_res, ft.Row([costo_res, pago_res]), fecha_retiro, dias_res,
+            ft.ElevatedButton("Registrar Reserva", on_click=registrar_reserva, bgcolor="#6B21E6", color="white"),
+            ft.ElevatedButton("Ver Reservas Activas", on_click=ver_reservas_activas, bgcolor="#3B82F6", color="white"),
+            ft.Row([reserva_id_retirar, pago_retiro]),
+            ft.ElevatedButton("Retirar Reserva (convertir a alquiler)", on_click=retirar_reserva, bgcolor="#10B981", color="white"),
+            ft.Row([reserva_id_cancelar]),
+            ft.ElevatedButton("Cancelar Reserva", on_click=cancelar_reserva, bgcolor="#EF4444", color="white")
+        ], spacing=15), padding=20), elevation=3),
         
-        self.form_alquiler = ft.Column([
-            ft.Text("ALQUILER NORMAL", size=16, weight="bold", color=COLOR_SECONDARY),
-            self.cedula_alquiler, self.disfraz_alquiler,
-            ft.Row([self.costo_alquiler, self.pago_alquiler, self.dias_alquiler]),
-            ft.ElevatedButton("Registrar Alquiler", on_click=self.registrar_alquiler_normal, bgcolor=COLOR_SECONDARY, color="white"),
-        ], spacing=15)
+        # Alquiler normal
+        ft.Card(ft.Container(ft.Column([
+            ft.Text("🎭 REGISTRAR ALQUILER", size=18, weight="bold", color="#F97316"),
+            cedula_alq, disfraz_alq, ft.Row([costo_alq, pago_alq, dias_alq]),
+            ft.ElevatedButton("Registrar Alquiler", on_click=registrar_alquiler, bgcolor="#F97316", color="white")
+        ], spacing=15), padding=20), elevation=3),
         
-        self.form_reserva = ft.Column([
-            ft.Text("RESERVA (50% mínimo)", size=16, weight="bold", color=COLOR_PRIMARY),
-            self.cedula_reserva, self.disfraz_reserva,
-            ft.Row([self.costo_reserva, self.pago_reserva]),
-            ft.Row([self.fecha_retiro_reserva, self.dias_reserva]),
-            ft.ElevatedButton("Registrar Reserva", on_click=self.registrar_reserva, bgcolor=COLOR_PRIMARY, color="white"),
-        ], spacing=15)
+        # Devolución
+        ft.Card(ft.Container(ft.Column([
+            ft.Text("🔄 REGISTRAR DEVOLUCIÓN", size=18, weight="bold", color="#10B981"),
+            cedula_dev,
+            ft.ElevatedButton("Verificar Alquiler", on_click=verificar_devolucion, bgcolor="#3B82F6", color="white"),
+            pago_saldo,
+            ft.Row([multa_retraso, multa_perdida]),
+            ft.ElevatedButton("Confirmar Devolución", on_click=confirmar_devolucion, bgcolor="#10B981", color="white")
+        ], spacing=15), padding=20), elevation=3),
         
-        self.form_alquiler.visible = False
-        self.form_reserva.visible = False
+        # Gastos
+        ft.Card(ft.Container(ft.Column([
+            ft.Text("💸 REGISTRAR GASTO", size=18, weight="bold", color="#EF4444"),
+            ft.Row([gasto_desc, gasto_monto]),
+            ft.ElevatedButton("Guardar Gasto", on_click=registrar_gasto, bgcolor="#EF4444", color="white")
+        ], spacing=15), padding=20), elevation=3),
         
-        devolucion_card = ft.Card(
-            content=ft.Container(
-                content=ft.Column([
-                    ft.Text("🔄 REGISTRAR DEVOLUCIÓN", size=18, weight="bold", color=COLOR_SUCCESS),
-                    self.cedula_devolucion,
-                    ft.ElevatedButton("🔍 Verificar Alquiler", on_click=self.verificar_devolucion, bgcolor=COLOR_INFO, color="white"),
-                    self.detalle_alquiler_card,
-                    ft.Row([self.multa_retraso_input, self.multa_perdida_input]),
-                    ft.ElevatedButton("✅ Confirmar Devolución", on_click=self.confirmar_devolucion, bgcolor=COLOR_SUCCESS, color="white"),
-                ], spacing=15),
-                padding=20,
-            ),
-            elevation=3,
-        )
+        # Consultas
+        ft.Card(ft.Container(ft.Column([
+            ft.Text("📊 CONSULTAS", size=18, weight="bold", color="#6B21E6"),
+            ft.Row([
+                ft.ElevatedButton("Ver Clientes", on_click=ver_clientes, bgcolor="#3B82F6", color="white"),
+                ft.ElevatedButton("Ver Activos", on_click=ver_activos, bgcolor="#3B82F6", color="white"),
+            ]),
+            ft.Row([
+                ft.ElevatedButton("Ver en Mora", on_click=ver_moras, bgcolor="#EF4444", color="white"),
+            ]),
+        ], spacing=15), padding=20), elevation=3),
         
-        reservas_gestion = ft.Card(
-            content=ft.Container(
-                content=ft.Column([
-                    ft.Text("📋 GESTIÓN DE RESERVAS", size=18, weight="bold", color=COLOR_INFO),
-                    ft.Row([
-                        ft.Column([
-                            ft.Text("Retirar reserva (convertir a alquiler)", weight="bold"),
-                            self.reserva_id_retirar,
-                            ft.ElevatedButton("✅ Retirar", on_click=self.retirar_reserva, bgcolor=COLOR_SUCCESS, color="white"),
-                        ], spacing=10),
-                        ft.Column([
-                            ft.Text("Cancelar reserva (eliminar sin ingreso)", weight="bold"),
-                            self.reserva_id_cancelar,
-                            ft.ElevatedButton("❌ Cancelar", on_click=self.cancelar_reserva, bgcolor=COLOR_DANGER, color="white"),
-                        ], spacing=10),
-                    ]),
-                    ft.ElevatedButton("📋 Ver Reservas Activas", on_click=self.ver_reservas_activas, bgcolor=COLOR_INFO, color="white"),
-                ], spacing=15),
-                padding=20,
-            ),
-            elevation=3,
-        )
+        # Reporte de ingresos con calendario
+        ft.Card(ft.Container(ft.Column([
+            ft.Text("📆 REPORTE DE INGRESOS", size=18, weight="bold", color="#6B21E6"),
+            ft.Row([fecha_calendario, ft.ElevatedButton("Ver Ingresos", on_click=ver_ingresos_por_fecha, bgcolor="#10B981", color="white")]),
+        ], spacing=15), padding=20), elevation=3),
         
-        gastos_card = ft.Card(
-            content=ft.Container(
-                content=ft.Column([
-                    ft.Text("💸 REGISTRAR GASTO", size=18, weight="bold", color=COLOR_DANGER),
-                    ft.Row([self.gasto_desc, self.gasto_monto]),
-                    ft.ElevatedButton("Guardar Gasto", on_click=self.registrar_gasto, bgcolor=COLOR_DANGER, color="white"),
-                ], spacing=15),
-                padding=20,
-            ),
-            elevation=3,
-        )
-        
-        consultas_card = ft.Card(
-            content=ft.Container(
-                content=ft.Column([
-                    ft.Text("📊 CONSULTAS", size=18, weight="bold", color=COLOR_PRIMARY),
-                    ft.Row([
-                        ft.ElevatedButton("Ver Clientes", on_click=self.ver_clientes, bgcolor=COLOR_INFO, color="white"),
-                        ft.ElevatedButton("Ver Activos", on_click=self.ver_activos, bgcolor=COLOR_INFO, color="white"),
-                    ]),
-                    ft.Row([
-                        ft.ElevatedButton("Ver en Mora", on_click=self.ver_moras, bgcolor=COLOR_DANGER, color="white"),
-                        ft.ElevatedButton("Ver Ingresos", on_click=self.ver_ingresos, bgcolor=COLOR_SUCCESS, color="white"),
-                    ]),
-                ], spacing=15),
-                padding=20,
-            ),
-            elevation=3,
-        )
-        
-        resultados_area = ft.Container(
-            content=ft.Column([
-                ft.Text("📋 RESULTADOS:", size=16, weight="bold", color=COLOR_PRIMARY),
-                ft.Container(content=self.resultado_texto, padding=15, bgcolor=ft.Colors.GREY_100, border_radius=10),
-            ], spacing=10),
-            padding=20,
-        )
-        
-        contenedor_tabs = ft.Column([
-            header,
-            clientes_card,
-            ft.Row([btn_alquiler, btn_reserva], alignment=ft.MainAxisAlignment.CENTER, spacing=20),
-            self.form_alquiler,
-            self.form_reserva,
-            devolucion_card,
-            reservas_gestion,
-            gastos_card,
-            consultas_card,
-            resultados_area,
-        ], spacing=20, scroll=ft.ScrollMode.AUTO)
-        
-        return ft.Container(content=contenedor_tabs, expand=True, padding=20, bgcolor=ft.Colors.GREY_50)
-    
-    def mostrar_form_alquiler(self, e):
-        self.form_alquiler.visible = True
-        self.form_reserva.visible = False
-        self.form_alquiler.update()
-        self.form_reserva.update()
-        self.mostrar_resultado("Complete los datos del alquiler normal", COLOR_INFO)
-    
-    def mostrar_form_reserva(self, e):
-        self.form_reserva.visible = True
-        self.form_alquiler.visible = False
-        self.form_reserva.update()
-        self.form_alquiler.update()
-        self.mostrar_resultado("Complete los datos de la reserva (mínimo 50% de anticipo)", COLOR_INFO)
-
-def main(page: ft.Page):
-    page.title = "TRAJES, DISFRACES Y MUCHO MÁS"
-    page.window_width = 850
-    page.window_height = 950
-    page.theme_mode = ft.ThemeMode.LIGHT
-    page.padding = 0
-    page.bgcolor = ft.Colors.GREY_50 
-
-    app = AppSistemaDisfraces()
-    page.add(app.build())
+        ft.Container(content=ft.Column([
+            ft.Text("📋 RESULTADOS:", size=16, weight="bold", color="#6B21E6"),
+            ft.Container(content=resultado, padding=15, bgcolor="#F9FAFB", border_radius=10)
+        ], spacing=10), padding=20)
+    )
 
 ft.app(target=main, port=8000)
