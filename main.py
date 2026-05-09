@@ -287,56 +287,59 @@ def main(page: ft.Page):
         resultado.update()
     
     # ========== INTERFAZ ==========
-    page.add(
-        ft.Container(
-            content=ft.Row([ft.Text("🎭", size=45), ft.Column([
-                ft.Text("TRAJES, DISFRACES Y MUCHO MÁS", size=22, weight="bold", color="white"),
-                ft.Text("Sistema de Gestión", size=14, color="white")
-            ], spacing=0)], alignment="center"),
-            padding=20,
-            bgcolor="#6B21E6",
-            border_radius=15
-        ),
-        ft.Card(
-            ft.Container(
-                content=ft.Column([
+    # Contenedor principal con altura fija y scroll
+    main_container = ft.Container(
+        content=ft.Column(
+            controls=[
+                ft.Container(
+                    content=ft.Row([ft.Text("🎭", size=45), ft.Column([
+                        ft.Text("TRAJES, DISFRACES Y MUCHO MÁS", size=22, weight="bold", color="white"),
+                        ft.Text("Sistema de Gestión", size=14, color="white")
+                    ], spacing=0)], alignment="center"),
+                    padding=20,
+                    bgcolor="#6B21E6",
+                    border_radius=15
+                ),
+                ft.Card(ft.Container(ft.Column([
                     ft.Text("📝 REGISTRAR CLIENTE", size=18, weight="bold", color="#6B21E6"),
                     cedula, nombre, telefono, direccion,
                     ft.ElevatedButton("Guardar Cliente", on_click=registrar_cliente, bgcolor="#3B82F6", color="white")
-                ], spacing=15),
-                padding=20
-            ),
-            elevation=3
-        ),
-        ft.Card(
-            ft.Container(
-                content=ft.Column([
+                ], spacing=15), padding=20), elevation=3),
+                ft.Card(ft.Container(ft.Column([
                     ft.Text("🎭 REGISTRAR ALQUILER", size=18, weight="bold", color="#F97316"),
                     cedula_alq, disfraz,
                     ft.Row([costo, pago, dias]),
                     ft.ElevatedButton("Registrar Alquiler", on_click=registrar_alquiler, bgcolor="#F97316", color="white")
-                ], spacing=15),
-                padding=20
-            ),
-            elevation=3
-        ),
-        ft.Card(
-            ft.Container(
-                content=ft.Column([
+                ], spacing=15), padding=20), elevation=3),
+                ft.Card(ft.Container(ft.Column([
+                    ft.Text("📅 REGISTRAR RESERVA (50% mínimo)", size=18, weight="bold", color="#6B21E6"),
+                    cedula_res, disfraz_res,
+                    ft.Row([costo_res, anticipo_res]),
+                    fecha_retiro_res, dias_res,
+                    ft.ElevatedButton("Registrar Reserva", on_click=registrar_reserva, bgcolor="#6B21E6", color="white")
+                ], spacing=15), padding=20), elevation=3),
+                ft.Card(ft.Container(ft.Column([
+                    ft.Text("📋 GESTIÓN DE RESERVAS", size=18, weight="bold", color="#6B21E6"),
+                    ft.Row([reserva_id, pago_retiro]),
+                    ft.ElevatedButton("Retirar Reserva", on_click=retirar_reserva, bgcolor="#10B981", color="white"),
+                    ft.ElevatedButton("Ver Reservas Activas", on_click=ver_reservas_activas, bgcolor="#3B82F6", color="white"),
+                    ft.Row([reserva_cancelar]),
+                    ft.ElevatedButton("Cancelar Reserva", on_click=cancelar_reserva, bgcolor="#EF4444", color="white")
+                ], spacing=15), padding=20), elevation=3),
+                ft.Card(ft.Container(ft.Column([
                     ft.Text("🔄 REGISTRAR DEVOLUCIÓN", size=18, weight="bold", color="#10B981"),
                     cedula_dev,
                     ft.ElevatedButton("Verificar Alquiler", on_click=verificar_alquiler, bgcolor="#3B82F6", color="white"),
-                    multa_retraso,
-                    multa_perdida,
+                    pago_saldo,
+                    ft.Row([multa_retraso, multa_perdida]),
                     ft.ElevatedButton("Confirmar Devolución", on_click=confirmar_devolucion, bgcolor="#10B981", color="white")
-                ], spacing=15),
-                padding=20
-            ),
-            elevation=3
-        ),
-        ft.Card(
-            ft.Container(
-                content=ft.Column([
+                ], spacing=15), padding=20), elevation=3),
+                ft.Card(ft.Container(ft.Column([
+                    ft.Text("💸 REGISTRAR GASTO", size=18, weight="bold", color="#EF4444"),
+                    ft.Row([gasto_desc, gasto_monto]),
+                    ft.ElevatedButton("Guardar Gasto", on_click=registrar_gasto, bgcolor="#EF4444", color="white")
+                ], spacing=15), padding=20), elevation=3),
+                ft.Card(ft.Container(ft.Column([
                     ft.Text("📊 CONSULTAS", size=18, weight="bold", color="#6B21E6"),
                     ft.Row([
                         ft.ElevatedButton("Ver Clientes", on_click=ver_clientes, bgcolor="#3B82F6", color="white"),
@@ -346,18 +349,22 @@ def main(page: ft.Page):
                         ft.ElevatedButton("Ver en Mora", on_click=ver_moras, bgcolor="#EF4444", color="white"),
                         ft.ElevatedButton("Ver Ingresos", on_click=ver_ingresos, bgcolor="#10B981", color="white"),
                     ]),
-                ], spacing=15),
-                padding=20
-            ),
-            elevation=3
+                ], spacing=15), padding=20), elevation=3),
+                ft.Container(
+                    content=ft.Column([
+                        ft.Text("📋 RESULTADOS:", size=16, weight="bold", color="#6B21E6"),
+                        ft.Container(content=resultado, padding=15, bgcolor="#F9FAFB", border_radius=10)
+                    ], spacing=10),
+                    padding=20
+                )
+            ],
+            spacing=20,
         ),
-        ft.Container(
-            content=ft.Column([
-                ft.Text("📋 RESULTADOS:", size=16, weight="bold", color="#6B21E6"),
-                ft.Container(content=resultado, padding=15, bgcolor="#F9FAFB", border_radius=10)
-            ], spacing=10),
-            padding=20
-        )
+        expand=True,  
     )
+    
+   
+    page.add(main_container)
 
-ft.app(target=main, port=8000)
+if __name__ == "__main__":
+    ft.app(target=main, host="0.0.0.0", port=8000)
